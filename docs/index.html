@@ -378,4 +378,71 @@
             let totalDist = 0, totalStops = 0;
             for (let i = 0; i < Math.min(tripIds.length, 5); i++) {
                 const analysis = analyze_route(tripIds[i]);
-                if
+                if (analysis) {
+                    out += `Trip ${analysis.trip_id}: ${analysis.num_stops} stops, ${analysis.total_distance_km} km\n`;
+                    totalDist += parseFloat(analysis.total_distance_km);
+                    totalStops += analysis.num_stops;
+                }
+            }
+            out += `\nSummary (first 5 trips): ${totalStops} total stops, ${totalDist.toFixed(2)} km total`;
+            analysisInfo.textContent = out;
+        });
+
+        findStopsBtn.addEventListener('click', () => {
+            const tripIds = Object.keys(stopTimesByTrip);
+            if (tripIds.length === 0) { analysisInfo.textContent = 'No trips loaded.'; return; }
+            const tripId = tripIds[0];
+            const seq = find_stops_in_trip(tripId);
+            let out = `Stops in trip ${tripId}:\n\n`;
+            for (const s of seq) {
+                out += `${s.stop_sequence}: ${s.stop_name} (${s.stop_id}) @ [${s.lat.toFixed(4)}, ${s.lon.toFixed(4)}]\n`;
+            }
+            analysisInfo.textContent = out;
+        });
+
+        calcDistanceBtn.addEventListener('click', () => {
+            const originText = startText.value.trim() || startSelect.value;
+            const finalText = endText.value.trim() || endSelect.value;
+            const origin = findStop(originText);
+            const final = findStop(finalText);
+            if (!origin || !final) { analysisInfo.textContent = 'Could not find both stops.'; return; }
+            const dist = calculate_distance(origin.lat, origin.lon, final.lat, final.lon);
+            analysisInfo.textContent = `Distance from ${origin.stop_name} to ${final.stop_name}:\n${dist.toFixed(2)} km (as the crow flies)`;
+        });
+
+        /* --- UI wiring --- */
+        loadCsvBtn.addEventListener('click', () => loadGTFS());
+        getRouteBtn.addEventListener('click', () => computeRoute());
+        clearRouteBtn.addEventListener('click', () => clearDrawn());
+
+        /* initial load */
+        loadGTFS();
+
+        /* --- Fetch and display gec2025.c source --- */
+        const cpre = document.getElementById('csource');
+        const reloadCBtn = document.getElementById('reloadCBtn');
+        const toggleCBtn = document.getElementById('toggleCBtn');
+
+        async function loadCSource() {
+            cpre.textContent = 'Loading...';
+            try {
+                const res = await fetch('../gec2025.c');
+                if (!res.ok) throw new Error('Fetch failed: ' + res.status);
+                const txt = await res.text();
+                cpre.textContent = txt;
+            } catch (err) {
+                cpre.textContent = 'Failed to load gec2025.c: ' + err.message;
+            }
+        }
+
+        reloadCBtn.addEventListener('click', loadCSource);
+        toggleCBtn.addEventListener('click', () => {
+            const d = document.getElementById('cDetails');
+            d.open = !d.open;
+        });
+        loadCSource();
+
+    </script>
+</body>
+
+</html>
