@@ -158,11 +158,11 @@ int find_stop_in_csv(const char* stopsPath, const char* query) {
 
 int main() {
   const char* csvFiles[] = {
-      "C:\\Users\\theme\\Desktop\\UNI\\GEC_2025\\csv_files\\routes.csv",
-      "C:\\Users\\theme\\Desktop\\UNI\\GEC_2025\\csv_files\\shapes.csv",
-      "C:\\Users\\theme\\Desktop\\UNI\\GEC_2025\\csv_files\\stops.csv",
-      "C:\\Users\\theme\\Desktop\\UNI\\GEC_2025\\csv_files\\stop_times.csv",
-      "C:\\Users\\theme\\Desktop\\UNI\\GEC_2025\\csv_files\\trips.csv"};
+      "csv_files\\routes.csv",
+      "csv_files\\shapes.csv",
+      "csv_files\\stops.csv",
+      "csv_files\\stop_times.csv",
+      "csv_files\\trips.csv"};
 
   char input[256];
   printf("Enter stop name or stop_id: ");
