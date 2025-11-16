@@ -4,319 +4,146 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>GEC2025 — GTFS route viewer</title>
+    <title>Guelph GTFS Map</title>
     <link rel="stylesheet" href="style.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 16px;
+        }
+
+        #map {
+            width: 100%;
+            height: 520px;
+            border-radius: 8px;
+        }
+
+        .controls {
+            max-width: 900px;
+            margin-bottom: 12px;
+            display: grid;
+            gap: 8px;
+        }
+
+        .row {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        label {
+            font-weight: 600;
+            margin-right: 6px;
+        }
+
+        select,
+        input[type="text"] {
+            padding: 6px;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+            min-width: 220px;
+        }
+
+        button {
+            padding: 8px 10px;
+            border-radius: 6px;
+            background: #35424a;
+            color: #fff;
+            border: none;
+            cursor: pointer;
+        }
+
+        button.secondary {
+            background: #e6e6e6;
+            color: #222;
+        }
+
+        pre.info {
+            background: #f7f7f7;
+            padding: 10px;
+            border-radius: 6px;
+            white-space: pre-wrap;
+        }
+    </style>
 </head>
 
 <body>
-    <header>
-        <h1>GTFS route viewer (University of Guelph)</h1>
-    </header>
+    <h1>Guelph GTFS Map — select start & end</h1>
 
-    <main>
-        <section class="project">
-            <h2>Load CSVs</h2>
+    <div class="controls">
+        <div>
+            <strong>CSV files</strong> — upload to override server files (stops.csv & stop_times.csv required)
+        </div>
+        <div class="row">
+            <input id="stopsFile" type="file" accept=".csv" />
+            <input id="stopTimesFile" type="file" accept=".csv" />
+            <button id="loadBtn">Load CSVs</button>
+            <button id="fetchBtn" class="secondary">Load from ./csv_files (server)</button>
+        </div>
 
-            <div>
-                <label style="display:block;font-weight:600;margin-bottom:6px;">
-                    Or load CSV files from your computer (will override server files)
-                </label>
-                <input id="stopsFile" type="file" accept=".csv" />
-                <input id="tripsFile" type="file" accept=".csv" />
-                <input id="stopTimesFile" type="file" accept=".csv" />
-                <div style="font-size:0.85rem;color:#555;margin-top:6px;">
-                    If you upload files they will be used instead of fetching ./csv_files/*.csv
-                </div>
-                <div style="margin-top:8px">
-                    <button id="loadCsvBtn">(Re)Load CSVs</button>
-                </div>
-            </div>
-        </section>
+        <div>
+            <strong>Choose locations</strong>
+        </div>
 
-        <section class="project" style="margin-top:18px;">
-            <h2>Choose origin & destination</h2>
-
-            <label for="startSelect">Start stop (dropdown)</label>
+        <div class="row">
+            <label for="startSelect">Start</label>
             <select id="startSelect"></select>
 
-            <label for="endSelect">End stop (dropdown)</label>
+            <label for="endSelect">End</label>
             <select id="endSelect"></select>
-
-            <div style="margin:8px 0">— or —</div>
-
-            <!-- These are the "inputs" analogous to gec2025.c origin/final prompts -->
-            <label for="origin_input">Origin (name or stop_id)</label>
-            <input id="origin_input" type="text" placeholder="e.g. S1 or 'Macdonald Hall'">
-
-            <label for="final_input">Final (name or stop_id)</label>
-            <input id="final_input" type="text" placeholder="e.g. S3 or 'Stone Road Mall'">
-
-            <div style="margin-top:10px">
-                <button id="getRouteBtn">Get Route / Use Inputs</button>
-                <button id="clearRouteBtn" class="secondary">Clear</button>
-            </div>
-
-            <div id="directionInfo" style="margin-top:10px"></div>
-        </section>
-
-        <section class="project" style="margin-top:18px;">
-            <h2>Map</h2>
-            <div id="map"
-                style="width:100%;height:520px;margin-top:12px;border-radius:8px;overflow:hidden;position:relative">
-            </div>
-        </section>
-
-        <section class="project" style="margin-top:18px;">
-            <h2>C source: gec2025.c</h2>
-            <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
-                <a id="downloadLink" href="../gec2025.c" download>Download gec2025.c</a>
-                <button id="reloadCBtn">Reload source</button>
-                <button id="toggleCBtn">Toggle view</button>
-            </div>
-            <details id="cDetails" open>
-                <summary>Show / hide C source</summary>
-                <pre id="csource"
-                    style="white-space:pre-wrap;max-height:520px;overflow:auto;background:#f7f7f7;padding:12px;border-radius:6px;border:1px solid #e1e1e1">Loading...</pre>
-            </details>
-        </section>
-
-        <div class="project">
-            <h2>Run gec2025.c (server execution)</h2>
-            <label>Origin (name or stop_id)</label>
-            <input id="run_origin" type="text" placeholder="e.g. Macdonald Hall">
-            <label>Final (name or stop_id)</label>
-            <input id="run_final" type="text" placeholder="e.g. University Centre">
-            <div style="margin-top:8px;">
-                <button id="runCBtn">Run C program</button>
-            </div>
-            <pre id="cOutput"
-                style="white-space:pre-wrap; background:#f7f7f7; padding:10px; margin-top:8px; max-height:300px; overflow:auto;">Output will appear here</pre>
         </div>
-    </main>
+
+        <div class="row">
+            <label for="startText">Or start (name/id)</label>
+            <input id="startText" type="text" placeholder="e.g. Macdonald Hall or S1" />
+            <label for="endText">Or end (name/id)</label>
+            <input id="endText" type="text" placeholder="e.g. University Centre or S3" />
+            <button id="routeBtn">Get Route</button>
+            <button id="clearBtn" class="secondary">Clear Map</button>
+        </div>
+
+        <div>
+            <div id="status" class="info">Status: idle</div>
+        </div>
+    </div>
+
+    <div id="map"></div>
 
     <script>
-        /* Simple GTFS viewer that accepts uploaded CSVs or fetches ./csv_files/*.csv,
-           allows entering origin/final (like gec2025.c prompts) and updates the map. */
+        /* Minimal GTFS route viewer:
+           - Accepts uploaded stops.csv and stop_times.csv (or falls back to ./csv_files/)
+           - Populates start/end selects
+           - Finds a trip that contains both stops in-order and draws that segment on the Leaflet map
+        */
 
-        /* ========== REPLACE: CSV parsing + loading with more robust handling ========== */
-
-        /**
-         * parseCSV - robust CSV parser with automatic delimiter detection and BOM trimming.
-         * Returns array of rows (each row is array of fields). Handles quoted fields
-         * and escaped double-quotes ("").
-         */
-        function parseCSV(text) {
-            if (!text) return [];
-            // strip UTF-8 BOM if present
-            if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
-
-            // normalize newlines
-            text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-
-            // detect delimiter by counting occurrences on first non-empty line
-            const firstLine = text.split('\n').find(l => l.trim().length > 0) || '';
-            const counts = {
-                ',': (firstLine.match(/,/g) || []).length,
-                ';': (firstLine.match(/;/g) || []).length,
-                '\t': (firstLine.match(/\t/g) || []).length
-            };
-            let delimiter = ',';
-            if (counts[';'] > counts[delimiter]) delimiter = ';';
-            if (counts['\t'] > counts[delimiter]) delimiter = '\t';
-
-            const rows = [];
-            let cur = [], field = '', inQuotes = false;
-
-            for (let i = 0; i < text.length; i++) {
-                const ch = text[i];
-
-                if (inQuotes) {
-                    if (ch === '"') {
-                        if (text[i + 1] === '"') { field += '"'; i++; } // escaped quote
-                        else inQuotes = false;
-                    } else {
-                        field += ch;
-                    }
-                } else {
-                    if (ch === '"') {
-                        inQuotes = true;
-                    } else if (ch === delimiter) {
-                        cur.push(field);
-                        field = '';
-                    } else if (ch === '\n') {
-                        cur.push(field);
-                        rows.push(cur);
-                        cur = [];
-                        field = '';
-                    } else {
-                        field += ch;
-                    }
-                }
-            }
-            // last field/row
-            if (field !== '' || cur.length > 0) {
-                cur.push(field);
-                rows.push(cur);
-            }
-
-            // Trim whitespace from all fields and normalize empty-only rows
-            const cleaned = rows.map(r => r.map(f => (f === undefined ? '' : String(f).trim())));
-            // remove fully-empty trailing rows
-            while (cleaned.length && cleaned[cleaned.length - 1].every(c => c === '')) cleaned.pop();
-            return cleaned;
-        }
-
-        /**
-         * fetchCSV - fetches CSV via HTTP and returns parsed rows. Provides clearer error messages.
-         */
-        async function fetchCSV(path) {
-            try {
-                const res = await fetch(path);
-                if (!res.ok) throw new Error('HTTP ' + res.status + ' ' + res.statusText);
-                const txt = await res.text();
-                return parseCSV(txt);
-            } catch (err) {
-                console.error('fetchCSV failed for', path, err);
-                throw err;
-            }
-        }
-
-        /**
-         * loadGTFS - loads stops.csv / trips.csv / stop_times.csv.
-         * Accepts uploaded file contents (stopsFileText etc.) or falls back to fetch('./csv_files/...').
-         * Improved header handling: case-insensitive, alternate names, logs header mapping to console.
-         */
-        async function loadGTFS() {
-            clearDrawn();
-            directionInfo.innerHTML = 'Loading CSVs...';
-            const base = './csv_files/';
-            try {
-                const stopsRows = stopsFileText ? parseCSV(stopsFileText) : await fetchCSV(base + 'stops.csv');
-                const tripsRows = tripsFileText ? parseCSV(tripsFileText) : await fetchCSV(base + 'trips.csv').catch(() => null);
-                const stopTimesRows = stopTimesFileText ? parseCSV(stopTimesFileText) : await fetchCSV(base + 'stop_times.csv');
-
-                // reset containers
-                stopsList.length = 0; for (const k in stops) delete stops[k];
-                for (const k in stopTimesByTrip) delete stopTimesByTrip[k];
-
-                if (!stopsRows || stopsRows.length < 1) throw new Error('stops.csv missing or empty');
-
-                // header mapping (case-insensitive)
-                const rawHdrStops = stopsRows[0].map(h => (h === undefined ? '' : String(h)));
-                const hdrStopsLower = rawHdrStops.map(h => h.trim().toLowerCase());
-                let i_id = hdrStopsLower.indexOf('stop_id');
-                let i_name = hdrStopsLower.indexOf('stop_name');
-                let i_lat = hdrStopsLower.indexOf('stop_lat');
-                let i_lon = hdrStopsLower.indexOf('stop_lon');
-
-                // fallback alternatives
-                if (i_id === -1) i_id = hdrStopsLower.indexOf('id');
-                if (i_name === -1) i_name = hdrStopsLower.indexOf('name');
-                if (i_lat === -1) i_lat = hdrStopsLower.indexOf('lat');
-                if (i_lon === -1) i_lon = hdrStopsLower.indexOf('lon');
-
-                console.info('stops.csv header mapping', {
-                    raw: rawHdrStops,
-                    mapping: { i_id, i_name, i_lat, i_lon }
-                });
-
-                // if stop_id or lat/lon couldn't be found, try positional fallbacks
-                if (i_id === -1) i_id = 0;
-                if (i_lat === -1 || i_lon === -1) {
-                    // attempt common patterns: lat/lon near end of row
-                    for (let i = 0; i < rawHdrStops.length; i++) {
-                        const h = hdrStopsLower[i];
-                        if (h === 'latitude' || h === 'y' || h === 'lat') i_lat = i;
-                        if (h === 'longitude' || h === 'x' || h === 'lon' || h === 'lng') i_lon = i;
-                    }
-                }
-
-                // Parse stops
-                for (let r = 1; r < stopsRows.length; r++) {
-                    const row = stopsRows[r];
-                    if (!row || row.length === 0) continue;
-                    const id = (i_id >= 0 && i_id < row.length) ? String(row[i_id]).trim() : '';
-                    const name = (i_name >= 0 && i_name < row.length) ? String(row[i_name]).trim() : id;
-                    const lat = (i_lat >= 0 && i_lat < row.length) ? parseFloat(String(row[i_lat]).trim()) : NaN;
-                    const lon = (i_lon >= 0 && i_lon < row.length) ? parseFloat(String(row[i_lon]).trim()) : NaN;
-
-                    if (!id || isNaN(lat) || isNaN(lon)) {
-                        console.warn(`Skipping stops row ${r} — id/coords invalid`, row);
-                        continue;
-                    }
-                    const obj = { stop_id: id, stop_name: name || id, lat, lon };
-                    stops[id] = obj;
-                    stopsList.push(obj);
-                }
-
-                // Parse stop_times -> group by trip_id
-                if (stopTimesRows && stopTimesRows.length >= 1) {
-                    const rawHdrStopTimes = stopTimesRows[0].map(h => (h === undefined ? '' : String(h)));
-                    const hdrStopTimesLower = rawHdrStopTimes.map(h => h.trim().toLowerCase());
-                    const i_trip = hdrStopTimesLower.indexOf('trip_id') !== -1 ? hdrStopTimesLower.indexOf('trip_id') : hdrStopTimesLower.indexOf('trip');
-                    const i_stop = hdrStopTimesLower.indexOf('stop_id') !== -1 ? hdrStopTimesLower.indexOf('stop_id') : hdrStopTimesLower.indexOf('stop');
-                    let i_seq = hdrStopTimesLower.indexOf('stop_sequence');
-                    if (i_seq === -1) {
-                        i_seq = hdrStopTimesLower.indexOf('stoporder');
-                        if (i_seq === -1) i_seq = hdrStopTimesLower.indexOf('sequence');
-                    }
-
-                    console.info('stop_times.csv header mapping', { raw: rawHdrStopTimes, mapping: { i_trip, i_stop, i_seq } });
-
-                    for (let r = 1; r < stopTimesRows.length; r++) {
-                        const row = stopTimesRows[r];
-                        if (!row || row.length === 0) continue;
-                        const tid = (i_trip >= 0 && i_trip < row.length) ? String(row[i_trip]).trim() : '';
-                        const sid = (i_stop >= 0 && i_stop < row.length) ? String(row[i_stop]).trim() : '';
-                        const seq = (i_seq >= 0 && i_seq < row.length) ? parseInt(String(row[i_seq]).trim(), 10) : r;
-                        if (!tid || !sid) {
-                            console.warn(`Skipping stop_times row ${r} — missing trip_id or stop_id`, row);
-                            continue;
-                        }
-                        stopTimesByTrip[tid] = stopTimesByTrip[tid] || [];
-                        stopTimesByTrip[tid].push({ stop_id: sid, stop_sequence: isNaN(seq) ? r : seq });
-                    }
-                }
-
-                populateStopSelects();
-                console.info('Loaded GTFS', { stops: stopsList.length, trips: Object.keys(stopTimesByTrip).length });
-                directionInfo.innerHTML = `Loaded stops: ${stopsList.length}, trips: ${Object.keys(stopTimesByTrip).length}`;
-            } catch (err) {
-                console.error('CSV load error:', err);
-                directionInfo.innerHTML = 'CSV load failed: ' + (err && err.message ? err.message : err);
-                throw err;
-            }
-        }
-
-        /* Map init */
         const map = L.map('map').setView([43.5322, -80.2230], 15);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
 
-        let drawn = { poly: null, markers: [] };
+        let polyLayer = null;
+        let markerLayers = [];
 
-        /* Data containers */
-        const stops = {}; const stopsList = []; const stopTimesByTrip = {}; const trips = {};
-        let stopsFileText = null, tripsFileText = null, stopTimesFileText = null;
+        const stops = {};          // stop_id -> {stop_id, stop_name, lat, lon}
+        const stopsList = [];      // array of stops
+        const stopTimesByTrip = {}; // trip_id -> [{stop_id, stop_sequence}, ...]
 
-        /* UI refs */
+        let stopsFileText = null, stopTimesFileText = null;
+
         const stopsFile = document.getElementById('stopsFile');
-        const tripsFile = document.getElementById('tripsFile');
         const stopTimesFile = document.getElementById('stopTimesFile');
-        const loadCsvBtn = document.getElementById('loadCsvBtn');
-        const getRouteBtn = document.getElementById('getRouteBtn');
-        const clearRouteBtn = document.getElementById('clearRouteBtn');
+        const loadBtn = document.getElementById('loadBtn');
+        const fetchBtn = document.getElementById('fetchBtn');
         const startSelect = document.getElementById('startSelect');
         const endSelect = document.getElementById('endSelect');
-        const origin_input = document.getElementById('origin_input');
-        const final_input = document.getElementById('final_input');
-        const directionInfo = document.getElementById('directionInfo');
-        const cpre = document.getElementById('csource');
-        const reloadCBtn = document.getElementById('reloadCBtn');
-        const toggleCBtn = document.getElementById('toggleCBtn');
+        const startText = document.getElementById('startText');
+        const endText = document.getElementById('endText');
+        const routeBtn = document.getElementById('routeBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const statusEl = document.getElementById('status');
 
-        /* Read local files into memory */
+        /* file readers */
         function readLocalFile(file, cb) {
             if (!file) { cb(null); return; }
             const fr = new FileReader();
@@ -324,36 +151,139 @@
             fr.onerror = () => cb(null);
             fr.readAsText(file, 'utf-8');
         }
-        stopsFile.addEventListener('change', e => readLocalFile(e.target.files[0], txt => { stopsFileText = txt; }));
-        tripsFile.addEventListener('change', e => readLocalFile(e.target.files[0], txt => { tripsFileText = txt; }));
-        stopTimesFile.addEventListener('change', e => readLocalFile(e.target.files[0], txt => { stopTimesFileText = txt; }));
+        stopsFile.addEventListener('change', e => readLocalFile(e.target.files[0], txt => { stopsFileText = txt; status('stops file loaded'); }));
+        stopTimesFile.addEventListener('change', e => readLocalFile(e.target.files[0], txt => { stopTimesFileText = txt; status('stop_times file loaded'); }));
 
-        /* Helpers */
-        function clearDrawn() {
-            if (drawn.poly) { map.removeLayer(drawn.poly); drawn.poly = null; }
-            drawn.markers.forEach(m => map.removeLayer(m)); drawn.markers = [];
-            directionInfo.innerHTML = '';
+        /* status helper */
+        function status(msg) { statusEl.textContent = 'Status: ' + msg; }
+
+        /* robust CSV parser (handles BOM, quoted fields, common delimiters) */
+        function parseCSV(text) {
+            if (!text) return [];
+            if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+            text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+            const first = text.split('\n').find(l => l.trim().length > 0) || '';
+            const counts = { ',': (first.match(/,/g) || []).length, ';': (first.match(/;/g) || []).length, '\t': (first.match(/\t/g) || []).length };
+            const delim = (counts[';'] > counts[',']) ? ';' : ((counts['\t'] > counts[',']) ? '\t' : ',');
+            const rows = []; let cur = [], field = '', inQ = false;
+            for (let i = 0; i < text.length; i++) {
+                const ch = text[i];
+                if (inQ) {
+                    if (ch === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else inQ = false; }
+                    else field += ch;
+                } else {
+                    if (ch === '"') inQ = true;
+                    else if (ch === delim) { cur.push(field); field = ''; }
+                    else if (ch === '\n') { cur.push(field); rows.push(cur); cur = []; field = ''; }
+                    else field += ch;
+                }
+            }
+            if (field !== '' || cur.length) { cur.push(field); rows.push(cur); }
+            const cleaned = rows.map(r => r.map(f => (f === undefined ? '' : String(f).trim())));
+            while (cleaned.length && cleaned[cleaned.length - 1].every(c => c === '')) cleaned.pop();
+            return cleaned;
         }
-        function drawStopsSequence(seq) {
-            clearDrawn();
-            const latlngs = seq.map(s => [s.lat, s.lon]);
-            drawn.poly = L.polyline(latlngs, { color: '#1f78b4', weight: 4 }).addTo(map);
-            seq.forEach((s, i) => {
-                const m = L.marker([s.lat, s.lon]).addTo(map).bindPopup(`${i === 0 ? 'Origin' : (i === seq.length - 1 ? 'Final' : 'Stop')}: ${s.stop_name} (${s.stop_id})`);
-                drawn.markers.push(m);
-            });
-            try { map.fitBounds(drawn.poly.getBounds(), { padding: [20, 20] }); } catch (e) { }
-            directionInfo.innerHTML = `Stops: ${seq.length}`;
+
+        /* fetch helper */
+        async function fetchCSV(path) {
+            const res = await fetch(path);
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const txt = await res.text();
+            return parseCSV(txt);
         }
+
+        /* load GTFS data (uploaded preferred, otherwise from ./csv_files/) */
+        async function loadGTFS() {
+            try {
+                status('loading CSVs...');
+                const stopsRows = stopsFileText ? parseCSV(stopsFileText) : await fetchCSV('./csv_files/stops.csv');
+                const stopTimesRows = stopTimesFileText ? parseCSV(stopTimesFileText) : await fetchCSV('./csv_files/stop_times.csv');
+
+                // reset
+                Object.keys(stops).forEach(k => delete stops[k]);
+                stopsList.length = 0;
+                Object.keys(stopTimesByTrip).forEach(k => delete stopTimesByTrip[k]);
+
+                if (!stopsRows || stopsRows.length < 1) throw new Error('stops.csv missing or empty');
+
+                const hdrStops = stopsRows[0].map(h => (h || '').toString().trim().toLowerCase());
+                let i_id = hdrStops.indexOf('stop_id');
+                let i_name = hdrStops.indexOf('stop_name');
+                let i_lat = hdrStops.indexOf('stop_lat');
+                let i_lon = hdrStops.indexOf('stop_lon');
+                if (i_id === -1) i_id = hdrStops.indexOf('id');
+                if (i_name === -1) i_name = hdrStops.indexOf('name');
+                if (i_lat === -1) i_lat = hdrStops.indexOf('lat');
+                if (i_lon === -1) i_lon = hdrStops.indexOf('lon');
+
+                // parse stops rows
+                for (let r = 1; r < stopsRows.length; r++) {
+                    const row = stopsRows[r];
+                    if (!row) continue;
+                    const id = (i_id >= 0 && i_id < row.length) ? String(row[i_id]).trim() : '';
+                    const name = (i_name >= 0 && i_name < row.length) ? String(row[i_name]).trim() : id;
+                    const lat = (i_lat >= 0 && i_lat < row.length) ? parseFloat(String(row[i_lat]).trim()) : NaN;
+                    const lon = (i_lon >= 0 && i_lon < row.length) ? parseFloat(String(row[i_lon]).trim()) : NaN;
+                    if (!id || isNaN(lat) || isNaN(lon)) continue;
+                    const s = { stop_id: id, stop_name: name || id, lat, lon };
+                    stops[id] = s; stopsList.push(s);
+                }
+
+                // parse stop_times
+                if (stopTimesRows && stopTimesRows.length > 0) {
+                    const hdrTimes = stopTimesRows[0].map(h => (h || '').toString().trim().toLowerCase());
+                    const i_trip = hdrTimes.indexOf('trip_id') !== -1 ? hdrTimes.indexOf('trip_id') : hdrTimes.indexOf('trip');
+                    const i_stop = hdrTimes.indexOf('stop_id') !== -1 ? hdrTimes.indexOf('stop_id') : hdrTimes.indexOf('stop');
+                    let i_seq = hdrTimes.indexOf('stop_sequence');
+                    if (i_seq === -1) { i_seq = hdrTimes.indexOf('stoporder'); if (i_seq === -1) i_seq = hdrTimes.indexOf('sequence'); }
+                    for (let r = 1; r < stopTimesRows.length; r++) {
+                        const row = stopTimesRows[r];
+                        if (!row) continue;
+                        const tid = (i_trip >= 0 && i_trip < row.length) ? String(row[i_trip]).trim() : '';
+                        const sid = (i_stop >= 0 && i_stop < row.length) ? String(row[i_stop]).trim() : '';
+                        const seq = (i_seq >= 0 && i_seq < row.length) ? parseInt(String(row[i_seq]).trim(), 10) : r;
+                        if (!tid || !sid) continue;
+                        stopTimesByTrip[tid] = stopTimesByTrip[tid] || [];
+                        stopTimesByTrip[tid].push({ stop_id: sid, stop_sequence: isNaN(seq) ? r : seq });
+                    }
+                }
+
+                populateSelects();
+                status(`loaded ${stopsList.length} stops, ${Object.keys(stopTimesByTrip).length} trips`);
+            } catch (err) {
+                console.error(err);
+                status('load error: ' + (err && err.message ? err.message : err));
+                alert('CSV load failed: ' + (err && err.message ? err.message : err));
+            }
+        }
+
+        /* populate selects */
+        function populateSelects() {
+            startSelect.innerHTML = ''; endSelect.innerHTML = '';
+            const placeholder = document.createElement('option'); placeholder.value = ''; placeholder.textContent = '-- choose --';
+            startSelect.appendChild(placeholder.cloneNode(true));
+            endSelect.appendChild(placeholder.cloneNode(true));
+            // sort by name for nicer UX
+            stopsList.sort((a, b) => (a.stop_name || '').localeCompare(b.stop_name || ''));
+            for (const s of stopsList) {
+                const o1 = document.createElement('option'); o1.value = s.stop_id; o1.textContent = `${s.stop_name} (${s.stop_id})`;
+                const o2 = o1.cloneNode(true);
+                startSelect.appendChild(o1); endSelect.appendChild(o2);
+            }
+        }
+
+        /* find stop by id or name substring */
         function findStop(query) {
             if (!query) return null;
-            query = query.trim();
+            query = String(query).trim();
             if (stops[query]) return stops[query];
             const q = query.toLowerCase();
             for (const s of stopsList) if (s.stop_name && s.stop_name.toLowerCase().includes(q)) return s;
             return null;
         }
-        function get_route_segment(originId, finalId) {
+
+        /* find trip sequence containing origin->final (in-order) */
+        function findTripSequence(originId, finalId) {
             for (const tripId in stopTimesByTrip) {
                 const seq = stopTimesByTrip[tripId].slice().sort((a, b) => a.stop_sequence - b.stop_sequence);
                 let idxO = -1, idxF = -1;
@@ -374,192 +304,68 @@
             return null;
         }
 
-        /* Populate selects */
-        function populateStopSelects() {
-            startSelect.innerHTML = ''; endSelect.innerHTML = '';
-            const opt = document.createElement('option'); opt.value = ''; opt.textContent = '-- choose or leave blank --';
-            startSelect.appendChild(opt.cloneNode(true)); endSelect.appendChild(opt.cloneNode(true));
-            stopsList.forEach(s => {
-                const label = `${s.stop_name} (${s.stop_id})`;
-                const o1 = document.createElement('option'); o1.value = s.stop_id; o1.textContent = label;
-                const o2 = o1.cloneNode(true);
-                startSelect.appendChild(o1); endSelect.appendChild(o2);
+        /* draw sequence */
+        function drawSequence(seq) {
+            clearMap();
+            if (!seq || seq.length === 0) return;
+            const latlngs = seq.map(s => [s.lat, s.lon]);
+            polyLayer = L.polyline(latlngs, { color: '#1f78b4', weight: 4 }).addTo(map);
+            seq.forEach((s, i) => {
+                const m = L.marker([s.lat, s.lon]).addTo(map).bindPopup(`${i === 0 ? 'Origin' : (i === seq.length - 1 ? 'Final' : 'Stop')}: ${s.stop_name} (${s.stop_id})`);
+                markerLayers.push(m);
             });
+            try { map.fitBounds(polyLayer.getBounds(), { padding: [20, 20] }); } catch (e) { }
+            // compute straight-line distance
+            let dist = 0;
+            for (let i = 0; i < seq.length - 1; i++) dist += haversine(seq[i].lat, seq[i].lon, seq[i + 1].lat, seq[i + 1].lon);
+            status(`plotted ${seq.length} stops — distance ≈ ${dist.toFixed(2)} km`);
         }
 
-        /* Load GTFS (uploaded files preferred) */
-        async function loadGTFS() {
-            clearDrawn();
-            directionInfo.innerHTML = 'Loading CSVs...';
-            const base = './csv_files/';
-            try {
-                const stopsRows = stopsFileText ? parseCSV(stopsFileText) : await fetchCSV(base + 'stops.csv');
-                const tripsRows = tripsFileText ? parseCSV(tripsFileText) : await fetchCSV(base + 'trips.csv').catch(() => null);
-                const stopTimesRows = stopTimesFileText ? parseCSV(stopTimesFileText) : await fetchCSV(base + 'stop_times.csv');
-
-                // reset containers
-                stopsList.length = 0; for (const k in stops) delete stops[k];
-                for (const k in stopTimesByTrip) delete stopTimesByTrip[k];
-
-                if (!stopsRows || stopsRows.length < 1) throw new Error('stops.csv missing or empty');
-
-                // header mapping (case-insensitive)
-                const rawHdrStops = stopsRows[0].map(h => (h === undefined ? '' : String(h)));
-                const hdrStopsLower = rawHdrStops.map(h => h.trim().toLowerCase());
-                let i_id = hdrStopsLower.indexOf('stop_id');
-                let i_name = hdrStopsLower.indexOf('stop_name');
-                let i_lat = hdrStopsLower.indexOf('stop_lat');
-                let i_lon = hdrStopsLower.indexOf('stop_lon');
-
-                // fallback alternatives
-                if (i_id === -1) i_id = hdrStopsLower.indexOf('id');
-                if (i_name === -1) i_name = hdrStopsLower.indexOf('name');
-                if (i_lat === -1) i_lat = hdrStopsLower.indexOf('lat');
-                if (i_lon === -1) i_lon = hdrStopsLower.indexOf('lon');
-
-                console.info('stops.csv header mapping', {
-                    raw: rawHdrStops,
-                    mapping: { i_id, i_name, i_lat, i_lon }
-                });
-
-                // if stop_id or lat/lon couldn't be found, try positional fallbacks
-                if (i_id === -1) i_id = 0;
-                if (i_lat === -1 || i_lon === -1) {
-                    // attempt common patterns: lat/lon near end of row
-                    for (let i = 0; i < rawHdrStops.length; i++) {
-                        const h = hdrStopsLower[i];
-                        if (h === 'latitude' || h === 'y' || h === 'lat') i_lat = i;
-                        if (h === 'longitude' || h === 'x' || h === 'lon' || h === 'lng') i_lon = i;
-                    }
-                }
-
-                // Parse stops
-                for (let r = 1; r < stopsRows.length; r++) {
-                    const row = stopsRows[r];
-                    if (!row || row.length === 0) continue;
-                    const id = (i_id >= 0 && i_id < row.length) ? String(row[i_id]).trim() : '';
-                    const name = (i_name >= 0 && i_name < row.length) ? String(row[i_name]).trim() : id;
-                    const lat = (i_lat >= 0 && i_lat < row.length) ? parseFloat(String(row[i_lat]).trim()) : NaN;
-                    const lon = (i_lon >= 0 && i_lon < row.length) ? parseFloat(String(row[i_lon]).trim()) : NaN;
-
-                    if (!id || isNaN(lat) || isNaN(lon)) {
-                        console.warn(`Skipping stops row ${r} — id/coords invalid`, row);
-                        continue;
-                    }
-                    const obj = { stop_id: id, stop_name: name || id, lat, lon };
-                    stops[id] = obj;
-                    stopsList.push(obj);
-                }
-
-                // Parse stop_times -> group by trip_id
-                if (stopTimesRows && stopTimesRows.length >= 1) {
-                    const rawHdrStopTimes = stopTimesRows[0].map(h => (h === undefined ? '' : String(h)));
-                    const hdrStopTimesLower = rawHdrStopTimes.map(h => h.trim().toLowerCase());
-                    const i_trip = hdrStopTimesLower.indexOf('trip_id') !== -1 ? hdrStopTimesLower.indexOf('trip_id') : hdrStopTimesLower.indexOf('trip');
-                    const i_stop = hdrStopTimesLower.indexOf('stop_id') !== -1 ? hdrStopTimesLower.indexOf('stop_id') : hdrStopTimesLower.indexOf('stop');
-                    let i_seq = hdrStopTimesLower.indexOf('stop_sequence');
-                    if (i_seq === -1) {
-                        i_seq = hdrStopTimesLower.indexOf('stoporder');
-                        if (i_seq === -1) i_seq = hdrStopTimesLower.indexOf('sequence');
-                    }
-
-                    console.info('stop_times.csv header mapping', { raw: rawHdrStopTimes, mapping: { i_trip, i_stop, i_seq } });
-
-                    for (let r = 1; r < stopTimesRows.length; r++) {
-                        const row = stopTimesRows[r];
-                        if (!row || row.length === 0) continue;
-                        const tid = (i_trip >= 0 && i_trip < row.length) ? String(row[i_trip]).trim() : '';
-                        const sid = (i_stop >= 0 && i_stop < row.length) ? String(row[i_stop]).trim() : '';
-                        const seq = (i_seq >= 0 && i_seq < row.length) ? parseInt(String(row[i_seq]).trim(), 10) : r;
-                        if (!tid || !sid) {
-                            console.warn(`Skipping stop_times row ${r} — missing trip_id or stop_id`, row);
-                            continue;
-                        }
-                        stopTimesByTrip[tid] = stopTimesByTrip[tid] || [];
-                        stopTimesByTrip[tid].push({ stop_id: sid, stop_sequence: isNaN(seq) ? r : seq });
-                    }
-                }
-
-                populateStopSelects();
-                console.info('Loaded GTFS', { stops: stopsList.length, trips: Object.keys(stopTimesByTrip).length });
-                directionInfo.innerHTML = `Loaded stops: ${stopsList.length}, trips: ${Object.keys(stopTimesByTrip).length}`;
-            } catch (err) {
-                console.error('CSV load error:', err);
-                directionInfo.innerHTML = 'CSV load failed: ' + (err && err.message ? err.message : err);
-                throw err;
-            }
+        /* clear */
+        function clearMap() {
+            if (polyLayer) { map.removeLayer(polyLayer); polyLayer = null; }
+            markerLayers.forEach(m => map.removeLayer(m)); markerLayers = [];
+            status('cleared map');
         }
 
-        /* Use origin_input and final_input (like gec2025.c) OR selects, then update map */
-        function applyInputsAndUpdateMap() {
+        /* haversine km */
+        function haversine(lat1, lon1, lat2, lon2) {
+            const R = 6371;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+            return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+        }
+
+        /* main route action */
+        function handleRoute() {
             // prefer selects if chosen
             const sId = startSelect.value || null;
             const eId = endSelect.value || null;
-            let origin = sId ? stops[sId] : findStop(origin_input.value);
-            let final = eId ? stops[eId] : findStop(final_input.value);
+            let origin = sId ? stops[sId] : findStop(startText.value);
+            let final = eId ? stops[eId] : findStop(endText.value);
 
-            if (!origin || !final) {
-                alert('Could not resolve both origin and final stops. Ensure CSVs loaded and inputs correct.');
-                return;
-            }
+            if (!origin || !final) { alert('Could not resolve both origin and final stops. Load CSVs and try again.'); return; }
             if (origin.stop_id === final.stop_id) { alert('Origin and final are the same stop.'); return; }
 
-            // try to find trip sequence; if none, show direct connection
-            const seq = get_route_segment(origin.stop_id, final.stop_id);
+            const seq = findTripSequence(origin.stop_id, final.stop_id);
             if (!seq) {
-                alert('No trip contains both stops in order. Showing direct connection.');
-                drawStopsSequence([origin, final]);
+                // fallback: direct line
+                if (!confirm('No trip contains both stops in order. Draw direct connection instead?')) return;
+                drawSequence([origin, final]);
                 return;
             }
-            drawStopsSequence(seq);
+            drawSequence(seq);
         }
 
-        /* Wire UI */
-        loadCsvBtn.addEventListener('click', () => loadGTFS());
-        getRouteBtn.addEventListener('click', () => applyInputsAndUpdateMap());
-        clearRouteBtn.addEventListener('click', () => clearDrawn());
+        /* UI wiring */
+        loadBtn.addEventListener('click', loadGTFS);
+        fetchBtn.addEventListener('click', () => { stopsFileText = null; stopTimesFileText = null; loadGTFS(); });
+        routeBtn.addEventListener('click', handleRoute);
+        clearBtn.addEventListener('click', clearMap);
 
-        /* initial attempts */
+        /* initial attempt to load server CSVs */
         loadGTFS();
-
-        /* C source fetch */
-        async function loadCSource() {
-            cpre.textContent = 'Loading...';
-            try {
-                const res = await fetch('../gec2025.c');
-                if (!res.ok) throw new Error('Fetch failed: ' + res.status);
-                cpre.textContent = await res.text();
-            } catch (err) {
-                cpre.textContent = 'Failed to load gec2025.c: ' + err.message;
-            }
-        }
-        reloadCBtn.addEventListener('click', loadCSource);
-        toggleCBtn.addEventListener('click', () => {
-            const d = document.getElementById('cDetails'); d.open = !d.open;
-        });
-        loadCSource();
-
-        // call /run-gec2025 on server
-        document.getElementById('runCBtn').addEventListener('click', async () => {
-            const origin = document.getElementById('run_origin').value || '';
-            const finalStop = document.getElementById('run_final').value || '';
-            document.getElementById('cOutput').textContent = 'Running...';
-            try {
-                const r = await fetch('/run-gec2025', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ origin, final: finalStop })
-                });
-                const j = await r.json();
-                let out = '';
-                out += `exit code: ${j.code}\n\n`;
-                if (j.stdout) out += 'STDOUT:\n' + j.stdout + '\n';
-                if (j.stderr) out += 'STDERR:\n' + j.stderr + '\n';
-                document.getElementById('cOutput').textContent = out;
-            } catch (err) {
-                document.getElementById('cOutput').textContent = 'Request failed: ' + String(err);
-            }
-        });
     </script>
 </body>
 
