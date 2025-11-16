@@ -166,6 +166,30 @@
                 }
             }
 
+            // Load routes CSV (diagnostics similar to stops)
+            async function loadRoutesData() {
+                try {
+                    const response = await fetch('../csv_files/routes.csv');
+                    const csvText = await response.text();
+
+                    const rawBytes = new Blob([csvText]).size;
+                    const newlineCount = (csvText.match(/\n/g) || []).length;
+                    addTerminalLine(`routes.csv: ${rawBytes} bytes, ~${newlineCount + 1} lines (including header)`);
+
+                    const previewLines = csvText.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+                    addTerminalLine(`routes preview first: ${previewLines[0] || ''}`);
+                    addTerminalLine(`routes preview second: ${previewLines[1] || ''}`);
+                    addTerminalLine(`routes preview last: ${previewLines[previewLines.length - 1] || ''}`);
+
+                    const routesData = parseCSV(csvText);
+                    addTerminalLine(`Parsed ${routesData.length} routes`);
+                    return routesData;
+                } catch (err) {
+                    addTerminalLine(`Error loading routes.csv: ${err.message}`, true);
+                    return null;
+                }
+            }
+
             // Find stop by name or ID
             function findStop(query) {
                 if (!query) return null;
@@ -229,6 +253,9 @@
                     }
 
                     addTerminalLine(`Loaded ${stopsData.length} stops\n`);
+                    // Also load and report routes.csv diagnostics
+                    const routes = await loadRoutesData();
+                    if (routes) addTerminalLine(`Loaded ${routes.length} routes\n`);
                     addTerminalLine('Enter origin stop name or stop_id:');
                     terminalInput.focus();
                 } catch (err) {
