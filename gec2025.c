@@ -2,6 +2,74 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
+#include <direct.h>
+// additional helpers
+#include <errno.h>
+#include <sys/stat.h>
+#include <windows.h>
+
+// Try to find a relative path by looking in the current directory and then
+// walking up parent directories up to max_levels. If found, writes the
+// absolute candidate path into outPath and returns 1, otherwise 0.
+int find_file_in_ancestors(const char* relPath, char* outPath, size_t outSize,
+                           int max_levels) {
+  char cwd[1024];
+  if (_getcwd(cwd, sizeof(cwd)) == NULL) return 0;
+
+  // Skip a leading ./ or .\ in relPath for clean concatenation
+  const char* rel = relPath;
+  if ((rel[0] == '.' && (rel[1] == '/' || rel[1] == '\\')))
+    rel += 2;
+
+  for (int level = 0; level <= max_levels; ++level) {
+    char base[1024];
+    strncpy(base, cwd, sizeof(base));
+    base[sizeof(base) - 1] = '\0';
+
+    // Move up `level` parents
+    for (int i = 0; i < level; ++i) {
+      char* p = strrchr(base, '\\');
+      if (!p) p = strrchr(base, '/');
+      if (!p) {
+        base[0] = '\0';
+        break;
+      }
+      *p = '\0';
+    }
+
+    // Build candidate path
+    char candidate[1200];
+    if (base[0] == '\0')
+      snprintf(candidate, sizeof(candidate), "%s", rel);
+    else
+      snprintf(candidate, sizeof(candidate), "%s\\%s", base, rel);
+
+    FILE* f = fopen(candidate, "r");
+    if (f) {
+      fclose(f);
+      strncpy(outPath, candidate, outSize);
+      outPath[outSize - 1] = '\0';
+      return 1;
+    }
+  }
+  return 0;
+}
+
+// Helper: get directory containing the running executable. Returns 1 on
+// success, 0 on failure.
+int get_exe_dir(char* out, size_t outSize) {
+  char path[MAX_PATH];
+  DWORD len = GetModuleFileNameA(NULL, path, MAX_PATH);
+  if (len == 0 || len == MAX_PATH) return 0;
+  char* p = strrchr(path, '\\');
+  if (!p) p = strrchr(path, '/');
+  if (!p) return 0;
+  *p = '\0';
+  strncpy(out, path, outSize);
+  out[outSize - 1] = '\0';
+  return 1;
+}
 // structs
 typedef struct {
   char* stop_id;
@@ -82,9 +150,37 @@ void str_to_lower_copy(const char* src, char* dest, size_t destSize) {
 // message and returns 0.
 int find_stop_in_csv(const char* stopsPath, const char* query) {
   FILE* fp = fopen(stopsPath, "r");
+  char resolved[1200];
   if (!fp) {
-    perror("opening stops file");
-    return 0;
+    // Try from current working directory and parents
+    if (find_file_in_ancestors(stopsPath, resolved, sizeof(resolved), 6)) {
+      printf("found stops file at: %s\n", resolved);
+      fp = fopen(resolved, "r");
+      if (!fp) {
+        fprintf(stderr, "opening stops file '%s': %s\n", resolved, strerror(errno));
+        return 0;
+      }
+    } else {
+      // Try from executable directory (useful when debugger runs with different cwd)
+      char exeDir[1024];
+      if (get_exe_dir(exeDir, sizeof(exeDir))) {
+        char oldcwd[1024];
+        if (_getcwd(oldcwd, sizeof(oldcwd)) != NULL) {
+          if (_chdir(exeDir) == 0) {
+            if (find_file_in_ancestors(stopsPath, resolved, sizeof(resolved), 6)) {
+              printf("found stops file at: %s\n", resolved);
+              fp = fopen(resolved, "r");
+            }
+            _chdir(oldcwd);
+          }
+        }
+      }
+    }
+
+    if (!fp) {
+      fprintf(stderr, "opening stops file '%s': %s\n", stopsPath, strerror(errno));
+      return 0;
+    }
   }
 
   char line[4096];
@@ -158,11 +254,11 @@ int find_stop_in_csv(const char* stopsPath, const char* query) {
 
 int main() {
   const char* csvFiles[] = {
-      "csv_files\\routes.csv",
-      "csv_files\\shapes.csv",
-      "csv_files\\stops.csv",
-      "csv_files\\stop_times.csv",
-      "csv_files\\trips.csv"};
+      "./csv_files/routes.csv",
+      "./csv_files/shapes.csv",
+      "./csv_files/stops.csv",
+      "./csv_files/stop_times.csv",
+      "./csv_files/trips.csv"};
 
   char input[256];
   printf("Enter stop name or stop_id: ");
@@ -173,7 +269,8 @@ int main() {
   }
 
   const char* stopsPath =
-      "C:\\Users\\theme\\Desktop\\UNI\\GEC_2025\\csv_files\\stops.csv";
+      "./csv_files/stops.csv";
+
   find_stop_in_csv(stopsPath, input);
 
   return 0;
