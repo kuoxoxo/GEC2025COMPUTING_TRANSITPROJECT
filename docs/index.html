@@ -75,11 +75,11 @@
 
     <div class="controls">
         <div>
-            <strong>CSV data</strong> — embedded in the page (no uploads required)
+            <strong>CSV data</strong> — loading from ./csv_files/ (all 612+ stops)
         </div>
 
         <div class="row">
-            <button id="loadBtn">(Re)Load embedded GTFS</button>
+            <button id="loadBtn">(Re)Load GTFS from CSV files</button>
             <button id="routeBtn">Get Route</button>
             <button id="clearBtn" class="secondary">Clear Map</button>
         </div>
@@ -112,7 +112,7 @@
 
     <script>
         /* GTFS route viewer that loads real CSV files from ./csv_files/
-           - fetches stops.csv and stop_times.csv
+           - fetches stops.csv and stop_times.csv from server
            - supports all 612+ stops
         */
 
@@ -163,17 +163,30 @@
             return cleaned;
         }
 
-        async function loadGTFSFromEmbedded() {
+        async function fetchCSV(path) {
             try {
-                status('parsing embedded CSVs...');
-                const stopsRows = parseCSV(stopsCsv);
-                const stopTimesRows = parseCSV(stopTimesCsv);
+                const res = await fetch(path);
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const txt = await res.text();
+                return parseCSV(txt);
+            } catch (err) {
+                console.error('fetchCSV failed for', path, err);
+                throw err;
+            }
+        }
+
+        async function loadGTFS() {
+            try {
+                status('fetching CSVs from ./csv_files/...');
+                const stopsRows = await fetchCSV('./csv_files/stops.csv');
+                const stopTimesRows = await fetchCSV('./csv_files/stop_times.csv');
+
                 // reset
                 Object.keys(stops).forEach(k => delete stops[k]);
                 stopsList.length = 0;
                 Object.keys(stopTimesByTrip).forEach(k => delete stopTimesByTrip[k]);
 
-                if (!stopsRows || stopsRows.length < 1) throw new Error('stops.csv missing or empty (embedded)');
+                if (!stopsRows || stopsRows.length < 1) throw new Error('stops.csv missing or empty');
 
                 const hdrStops = stopsRows[0].map(h => (h || '').toString().trim().toLowerCase());
                 let i_id = hdrStops.indexOf('stop_id');
@@ -185,16 +198,19 @@
                 if (i_lat === -1) i_lat = hdrStops.indexOf('lat');
                 if (i_lon === -1) i_lon = hdrStops.indexOf('lon');
 
+                console.log('stops.csv header mapping:', { i_id, i_name, i_lat, i_lon });
+
                 for (let r = 1; r < stopsRows.length; r++) {
                     const row = stopsRows[r];
-                    if (!row) continue;
+                    if (!row || row.length === 0) continue;
                     const id = (i_id >= 0 && i_id < row.length) ? String(row[i_id]).trim() : '';
                     const name = (i_name >= 0 && i_name < row.length) ? String(row[i_name]).trim() : id;
                     const lat = (i_lat >= 0 && i_lat < row.length) ? parseFloat(String(row[i_lat]).trim()) : NaN;
                     const lon = (i_lon >= 0 && i_lon < row.length) ? parseFloat(String(row[i_lon]).trim()) : NaN;
                     if (!id || isNaN(lat) || isNaN(lon)) continue;
                     const s = { stop_id: id, stop_name: name || id, lat, lon };
-                    stops[id] = s; stopsList.push(s);
+                    stops[id] = s;
+                    stopsList.push(s);
                 }
 
                 // parse stop_times
@@ -204,9 +220,12 @@
                     const i_stop = hdrTimes.indexOf('stop_id') !== -1 ? hdrTimes.indexOf('stop_id') : hdrTimes.indexOf('stop');
                     let i_seq = hdrTimes.indexOf('stop_sequence');
                     if (i_seq === -1) { i_seq = hdrTimes.indexOf('stoporder'); if (i_seq === -1) i_seq = hdrTimes.indexOf('sequence'); }
+
+                    console.log('stop_times.csv header mapping:', { i_trip, i_stop, i_seq });
+
                     for (let r = 1; r < stopTimesRows.length; r++) {
                         const row = stopTimesRows[r];
-                        if (!row) continue;
+                        if (!row || row.length === 0) continue;
                         const tid = (i_trip >= 0 && i_trip < row.length) ? String(row[i_trip]).trim() : '';
                         const sid = (i_stop >= 0 && i_stop < row.length) ? String(row[i_stop]).trim() : '';
                         const seq = (i_seq >= 0 && i_seq < row.length) ? parseInt(String(row[i_seq]).trim(), 10) : r;
@@ -217,7 +236,8 @@
                 }
 
                 populateSelects();
-                status(`loaded ${stopsList.length} stops, ${Object.keys(stopTimesByTrip).length} trips (embedded)`);
+                status(`loaded ${stopsList.length} stops, ${Object.keys(stopTimesByTrip).length} trips`);
+                console.log('Load complete:', { stops: stopsList.length, trips: Object.keys(stopTimesByTrip).length });
             } catch (err) {
                 console.error(err);
                 status('load error: ' + (err && err.message ? err.message : err));
@@ -315,12 +335,12 @@
             drawSequence(seq);
         }
 
-        loadBtn.addEventListener('click', loadGTFSFromEmbedded);
+        loadBtn.addEventListener('click', loadGTFS);
         routeBtn.addEventListener('click', handleRoute);
         clearBtn.addEventListener('click', clearMap);
 
-        // auto load embedded CSVs on open
-        loadGTFSFromEmbedded();
+        // auto load from server on open
+        loadGTFS();
     </script>
 </body>
 
