@@ -33,8 +33,103 @@ main {
     border-radius: 8px;
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
     margin-top: 10px;
+    /* ensure leaflet tiles fill rounded container on some browsers */
+    overflow: hidden;
 }
 
+/* Controls for routes (container used in index.html: #route-controls) */
+#route-controls {
+    background: #fff;
+    border-radius: 8px;
+    padding: 12px;
+    margin-top: 12px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+    align-items: center;
+}
+
+/* Make the controls stack on small screens */
+@media (max-width: 680px) {
+    #route-controls {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Form element styling */
+#route-controls label {
+    font-size: 0.9rem;
+    color: #333;
+    display: block;
+    margin-bottom: 4px;
+}
+
+#route-controls select,
+#route-controls input[type="color"],
+#route-controls textarea {
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 8px;
+    font-size: 0.95rem;
+    width: 100%;
+    box-sizing: border-box;
+    background: #fff;
+}
+
+#route-controls textarea {
+    resize: vertical;
+    min-height: 90px;
+    max-height: 260px;
+    font-family: inherit;
+    white-space: nowrap;
+    overflow-wrap: normal;
+}
+
+/* Buttons */
+#route-controls button {
+    background: #35424a;
+    color: #fff;
+    border: none;
+    padding: 8px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: background 0.12s ease, transform 0.06s ease;
+}
+
+#route-controls button:hover {
+    background: #2b3a42;
+}
+
+#route-controls button:active {
+    transform: translateY(1px);
+}
+
+/* Secondary action style */
+#route-controls button.secondary {
+    background: #e6e6e6;
+    color: #222;
+}
+
+#route-controls button.secondary:hover {
+    background: #d4d4d4;
+}
+
+/* Layout helpers for the control block rows */
+.controls-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+/* Small select / color input grouping */
+.controls-row .small {
+    min-width: 120px;
+    max-width: 220px;
+}
+
+/* Links and inline code */
 pre {
     background: #f8f8f8;
     padding: 15px;
