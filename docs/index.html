@@ -87,32 +87,194 @@
         /* Simple GTFS viewer that accepts uploaded CSVs or fetches ./csv_files/*.csv,
            allows entering origin/final (like gec2025.c prompts) and updates the map. */
 
+        /* ========== REPLACE: CSV parsing + loading with more robust handling ========== */
+
+        /**
+         * parseCSV - robust CSV parser with automatic delimiter detection and BOM trimming.
+         * Returns array of rows (each row is array of fields). Handles quoted fields
+         * and escaped double-quotes ("").
+         */
         function parseCSV(text) {
+            if (!text) return [];
+            // strip UTF-8 BOM if present
+            if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+
+            // normalize newlines
+            text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+            // detect delimiter by counting occurrences on first non-empty line
+            const firstLine = text.split('\n').find(l => l.trim().length > 0) || '';
+            const counts = {
+                ',': (firstLine.match(/,/g) || []).length,
+                ';': (firstLine.match(/;/g) || []).length,
+                '\t': (firstLine.match(/\t/g) || []).length
+            };
+            let delimiter = ',';
+            if (counts[';'] > counts[delimiter]) delimiter = ';';
+            if (counts['\t'] > counts[delimiter]) delimiter = '\t';
+
             const rows = [];
-            let i = 0, cur = [], field = '', inQuotes = false;
-            while (i < text.length) {
+            let cur = [], field = '', inQuotes = false;
+
+            for (let i = 0; i < text.length; i++) {
                 const ch = text[i];
+
                 if (inQuotes) {
-                    if (ch === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else inQuotes = false; }
-                    else field += ch;
+                    if (ch === '"') {
+                        if (text[i + 1] === '"') { field += '"'; i++; } // escaped quote
+                        else inQuotes = false;
+                    } else {
+                        field += ch;
+                    }
                 } else {
-                    if (ch === '"') inQuotes = true;
-                    else if (ch === ',') { cur.push(field); field = ''; }
-                    else if (ch === '\r') { }
-                    else if (ch === '\n') { cur.push(field); field = ''; rows.push(cur); cur = []; }
-                    else field += ch;
+                    if (ch === '"') {
+                        inQuotes = true;
+                    } else if (ch === delimiter) {
+                        cur.push(field);
+                        field = '';
+                    } else if (ch === '\n') {
+                        cur.push(field);
+                        rows.push(cur);
+                        cur = [];
+                        field = '';
+                    } else {
+                        field += ch;
+                    }
                 }
-                i++;
             }
-            if (field !== '' || cur.length) { cur.push(field); rows.push(cur); }
-            return rows;
+            // last field/row
+            if (field !== '' || cur.length > 0) {
+                cur.push(field);
+                rows.push(cur);
+            }
+
+            // Trim whitespace from all fields and normalize empty-only rows
+            const cleaned = rows.map(r => r.map(f => (f === undefined ? '' : String(f).trim())));
+            // remove fully-empty trailing rows
+            while (cleaned.length && cleaned[cleaned.length - 1].every(c => c === '')) cleaned.pop();
+            return cleaned;
         }
 
+        /**
+         * fetchCSV - fetches CSV via HTTP and returns parsed rows. Provides clearer error messages.
+         */
         async function fetchCSV(path) {
-            const res = await fetch(path);
-            if (!res.ok) throw new Error('Fetch ' + path + ' failed: ' + res.status);
-            const txt = await res.text();
-            return parseCSV(txt);
+            try {
+                const res = await fetch(path);
+                if (!res.ok) throw new Error('HTTP ' + res.status + ' ' + res.statusText);
+                const txt = await res.text();
+                return parseCSV(txt);
+            } catch (err) {
+                console.error('fetchCSV failed for', path, err);
+                throw err;
+            }
+        }
+
+        /**
+         * loadGTFS - loads stops.csv / trips.csv / stop_times.csv.
+         * Accepts uploaded file contents (stopsFileText etc.) or falls back to fetch('./csv_files/...').
+         * Improved header handling: case-insensitive, alternate names, logs header mapping to console.
+         */
+        async function loadGTFS() {
+            clearDrawn();
+            directionInfo.innerHTML = 'Loading CSVs...';
+            const base = './csv_files/';
+            try {
+                const stopsRows = stopsFileText ? parseCSV(stopsFileText) : await fetchCSV(base + 'stops.csv');
+                const tripsRows = tripsFileText ? parseCSV(tripsFileText) : await fetchCSV(base + 'trips.csv').catch(() => null);
+                const stopTimesRows = stopTimesFileText ? parseCSV(stopTimesFileText) : await fetchCSV(base + 'stop_times.csv');
+
+                // reset containers
+                stopsList.length = 0; for (const k in stops) delete stops[k];
+                for (const k in stopTimesByTrip) delete stopTimesByTrip[k];
+
+                if (!stopsRows || stopsRows.length < 1) throw new Error('stops.csv missing or empty');
+
+                // header mapping (case-insensitive)
+                const rawHdrStops = stopsRows[0].map(h => (h === undefined ? '' : String(h)));
+                const hdrStopsLower = rawHdrStops.map(h => h.trim().toLowerCase());
+                let i_id = hdrStopsLower.indexOf('stop_id');
+                let i_name = hdrStopsLower.indexOf('stop_name');
+                let i_lat = hdrStopsLower.indexOf('stop_lat');
+                let i_lon = hdrStopsLower.indexOf('stop_lon');
+
+                // fallback alternatives
+                if (i_id === -1) i_id = hdrStopsLower.indexOf('id');
+                if (i_name === -1) i_name = hdrStopsLower.indexOf('name');
+                if (i_lat === -1) i_lat = hdrStopsLower.indexOf('lat');
+                if (i_lon === -1) i_lon = hdrStopsLower.indexOf('lon');
+
+                console.info('stops.csv header mapping', {
+                    raw: rawHdrStops,
+                    mapping: { i_id, i_name, i_lat, i_lon }
+                });
+
+                // if stop_id or lat/lon couldn't be found, try positional fallbacks
+                if (i_id === -1) i_id = 0;
+                if (i_lat === -1 || i_lon === -1) {
+                    // attempt common patterns: lat/lon near end of row
+                    for (let i = 0; i < rawHdrStops.length; i++) {
+                        const h = hdrStopsLower[i];
+                        if (h === 'latitude' || h === 'y' || h === 'lat') i_lat = i;
+                        if (h === 'longitude' || h === 'x' || h === 'lon' || h === 'lng') i_lon = i;
+                    }
+                }
+
+                // Parse stops
+                for (let r = 1; r < stopsRows.length; r++) {
+                    const row = stopsRows[r];
+                    if (!row || row.length === 0) continue;
+                    const id = (i_id >= 0 && i_id < row.length) ? String(row[i_id]).trim() : '';
+                    const name = (i_name >= 0 && i_name < row.length) ? String(row[i_name]).trim() : id;
+                    const lat = (i_lat >= 0 && i_lat < row.length) ? parseFloat(String(row[i_lat]).trim()) : NaN;
+                    const lon = (i_lon >= 0 && i_lon < row.length) ? parseFloat(String(row[i_lon]).trim()) : NaN;
+
+                    if (!id || isNaN(lat) || isNaN(lon)) {
+                        console.warn(`Skipping stops row ${r} — id/coords invalid`, row);
+                        continue;
+                    }
+                    const obj = { stop_id: id, stop_name: name || id, lat, lon };
+                    stops[id] = obj;
+                    stopsList.push(obj);
+                }
+
+                // Parse stop_times -> group by trip_id
+                if (stopTimesRows && stopTimesRows.length >= 1) {
+                    const rawHdrStopTimes = stopTimesRows[0].map(h => (h === undefined ? '' : String(h)));
+                    const hdrStopTimesLower = rawHdrStopTimes.map(h => h.trim().toLowerCase());
+                    const i_trip = hdrStopTimesLower.indexOf('trip_id') !== -1 ? hdrStopTimesLower.indexOf('trip_id') : hdrStopTimesLower.indexOf('trip');
+                    const i_stop = hdrStopTimesLower.indexOf('stop_id') !== -1 ? hdrStopTimesLower.indexOf('stop_id') : hdrStopTimesLower.indexOf('stop');
+                    let i_seq = hdrStopTimesLower.indexOf('stop_sequence');
+                    if (i_seq === -1) {
+                        i_seq = hdrStopTimesLower.indexOf('stoporder');
+                        if (i_seq === -1) i_seq = hdrStopTimesLower.indexOf('sequence');
+                    }
+
+                    console.info('stop_times.csv header mapping', { raw: rawHdrStopTimes, mapping: { i_trip, i_stop, i_seq } });
+
+                    for (let r = 1; r < stopTimesRows.length; r++) {
+                        const row = stopTimesRows[r];
+                        if (!row || row.length === 0) continue;
+                        const tid = (i_trip >= 0 && i_trip < row.length) ? String(row[i_trip]).trim() : '';
+                        const sid = (i_stop >= 0 && i_stop < row.length) ? String(row[i_stop]).trim() : '';
+                        const seq = (i_seq >= 0 && i_seq < row.length) ? parseInt(String(row[i_seq]).trim(), 10) : r;
+                        if (!tid || !sid) {
+                            console.warn(`Skipping stop_times row ${r} — missing trip_id or stop_id`, row);
+                            continue;
+                        }
+                        stopTimesByTrip[tid] = stopTimesByTrip[tid] || [];
+                        stopTimesByTrip[tid].push({ stop_id: sid, stop_sequence: isNaN(seq) ? r : seq });
+                    }
+                }
+
+                populateStopSelects();
+                console.info('Loaded GTFS', { stops: stopsList.length, trips: Object.keys(stopTimesByTrip).length });
+                directionInfo.innerHTML = `Loaded stops: ${stopsList.length}, trips: ${Object.keys(stopTimesByTrip).length}`;
+            } catch (err) {
+                console.error('CSV load error:', err);
+                directionInfo.innerHTML = 'CSV load failed: ' + (err && err.message ? err.message : err);
+                throw err;
+            }
         }
 
         /* Map init */
@@ -226,46 +388,92 @@
                 stopsList.length = 0; for (const k in stops) delete stops[k];
                 for (const k in stopTimesByTrip) delete stopTimesByTrip[k];
 
-                if (!stopsRows || stopsRows.length < 2) throw new Error('stops.csv missing or empty');
-                const hdrStops = stopsRows[0].map(h => h.trim().toLowerCase());
-                let i_id = hdrStops.indexOf('stop_id'), i_name = hdrStops.indexOf('stop_name'),
-                    i_lat = hdrStops.indexOf('stop_lat'), i_lon = hdrStops.indexOf('stop_lon');
-                if (i_lat === -1) i_lat = hdrStops.indexOf('lat');
-                if (i_lon === -1) i_lon = hdrStops.indexOf('lon');
-                if (i_name === -1) i_name = hdrStops.indexOf('name');
+                if (!stopsRows || stopsRows.length < 1) throw new Error('stops.csv missing or empty');
 
-                for (let i = 1; i < stopsRows.length; i++) {
-                    const r = stopsRows[i]; if (!r) continue;
-                    const id = (i_id >= 0 && i_id < r.length) ? r[i_id].trim() : null;
-                    const name = (i_name >= 0 && i_name < r.length) ? r[i_name].trim() : id;
-                    const lat = (i_lat >= 0 && i_lat < r.length) ? parseFloat(r[i_lat].trim()) : NaN;
-                    const lon = (i_lon >= 0 && i_lon < r.length) ? parseFloat(r[i_lon].trim()) : NaN;
-                    if (!id || isNaN(lat) || isNaN(lon)) continue;
-                    const obj = { stop_id: id, stop_name: name, lat: lat, lon: lon };
-                    stops[id] = obj; stopsList.push(obj);
+                // header mapping (case-insensitive)
+                const rawHdrStops = stopsRows[0].map(h => (h === undefined ? '' : String(h)));
+                const hdrStopsLower = rawHdrStops.map(h => h.trim().toLowerCase());
+                let i_id = hdrStopsLower.indexOf('stop_id');
+                let i_name = hdrStopsLower.indexOf('stop_name');
+                let i_lat = hdrStopsLower.indexOf('stop_lat');
+                let i_lon = hdrStopsLower.indexOf('stop_lon');
+
+                // fallback alternatives
+                if (i_id === -1) i_id = hdrStopsLower.indexOf('id');
+                if (i_name === -1) i_name = hdrStopsLower.indexOf('name');
+                if (i_lat === -1) i_lat = hdrStopsLower.indexOf('lat');
+                if (i_lon === -1) i_lon = hdrStopsLower.indexOf('lon');
+
+                console.info('stops.csv header mapping', {
+                    raw: rawHdrStops,
+                    mapping: { i_id, i_name, i_lat, i_lon }
+                });
+
+                // if stop_id or lat/lon couldn't be found, try positional fallbacks
+                if (i_id === -1) i_id = 0;
+                if (i_lat === -1 || i_lon === -1) {
+                    // attempt common patterns: lat/lon near end of row
+                    for (let i = 0; i < rawHdrStops.length; i++) {
+                        const h = hdrStopsLower[i];
+                        if (h === 'latitude' || h === 'y' || h === 'lat') i_lat = i;
+                        if (h === 'longitude' || h === 'x' || h === 'lon' || h === 'lng') i_lon = i;
+                    }
                 }
 
-                if (stopTimesRows && stopTimesRows.length >= 2) {
-                    const hdr = stopTimesRows[0].map(h => h.trim().toLowerCase());
-                    const i_trip = hdr.indexOf('trip_id'), i_stop = hdr.indexOf('stop_id');
-                    let i_seq = hdr.indexOf('stop_sequence'); if (i_seq === -1) i_seq = hdr.indexOf('sequence');
-                    for (let i = 1; i < stopTimesRows.length; i++) {
-                        const r = stopTimesRows[i]; if (!r) continue;
-                        const tid = (i_trip >= 0 && i_trip < r.length) ? r[i_trip].trim() : null;
-                        const sid = (i_stop >= 0 && i_stop < r.length) ? r[i_stop].trim() : null;
-                        const seq = (i_seq >= 0 && i_seq < r.length) ? parseInt(r[i_seq].trim(), 10) : i;
-                        if (!tid || !sid) continue;
+                // Parse stops
+                for (let r = 1; r < stopsRows.length; r++) {
+                    const row = stopsRows[r];
+                    if (!row || row.length === 0) continue;
+                    const id = (i_id >= 0 && i_id < row.length) ? String(row[i_id]).trim() : '';
+                    const name = (i_name >= 0 && i_name < row.length) ? String(row[i_name]).trim() : id;
+                    const lat = (i_lat >= 0 && i_lat < row.length) ? parseFloat(String(row[i_lat]).trim()) : NaN;
+                    const lon = (i_lon >= 0 && i_lon < row.length) ? parseFloat(String(row[i_lon]).trim()) : NaN;
+
+                    if (!id || isNaN(lat) || isNaN(lon)) {
+                        console.warn(`Skipping stops row ${r} — id/coords invalid`, row);
+                        continue;
+                    }
+                    const obj = { stop_id: id, stop_name: name || id, lat, lon };
+                    stops[id] = obj;
+                    stopsList.push(obj);
+                }
+
+                // Parse stop_times -> group by trip_id
+                if (stopTimesRows && stopTimesRows.length >= 1) {
+                    const rawHdrStopTimes = stopTimesRows[0].map(h => (h === undefined ? '' : String(h)));
+                    const hdrStopTimesLower = rawHdrStopTimes.map(h => h.trim().toLowerCase());
+                    const i_trip = hdrStopTimesLower.indexOf('trip_id') !== -1 ? hdrStopTimesLower.indexOf('trip_id') : hdrStopTimesLower.indexOf('trip');
+                    const i_stop = hdrStopTimesLower.indexOf('stop_id') !== -1 ? hdrStopTimesLower.indexOf('stop_id') : hdrStopTimesLower.indexOf('stop');
+                    let i_seq = hdrStopTimesLower.indexOf('stop_sequence');
+                    if (i_seq === -1) {
+                        i_seq = hdrStopTimesLower.indexOf('stoporder');
+                        if (i_seq === -1) i_seq = hdrStopTimesLower.indexOf('sequence');
+                    }
+
+                    console.info('stop_times.csv header mapping', { raw: rawHdrStopTimes, mapping: { i_trip, i_stop, i_seq } });
+
+                    for (let r = 1; r < stopTimesRows.length; r++) {
+                        const row = stopTimesRows[r];
+                        if (!row || row.length === 0) continue;
+                        const tid = (i_trip >= 0 && i_trip < row.length) ? String(row[i_trip]).trim() : '';
+                        const sid = (i_stop >= 0 && i_stop < row.length) ? String(row[i_stop]).trim() : '';
+                        const seq = (i_seq >= 0 && i_seq < row.length) ? parseInt(String(row[i_seq]).trim(), 10) : r;
+                        if (!tid || !sid) {
+                            console.warn(`Skipping stop_times row ${r} — missing trip_id or stop_id`, row);
+                            continue;
+                        }
                         stopTimesByTrip[tid] = stopTimesByTrip[tid] || [];
-                        stopTimesByTrip[tid].push({ stop_id: sid, stop_sequence: seq });
+                        stopTimesByTrip[tid].push({ stop_id: sid, stop_sequence: isNaN(seq) ? r : seq });
                     }
                 }
 
                 populateStopSelects();
+                console.info('Loaded GTFS', { stops: stopsList.length, trips: Object.keys(stopTimesByTrip).length });
                 directionInfo.innerHTML = `Loaded stops: ${stopsList.length}, trips: ${Object.keys(stopTimesByTrip).length}`;
             } catch (err) {
                 console.error('CSV load error:', err);
-                directionInfo.innerHTML = 'CSV load failed: ' + err.message;
-                alert('CSV load failed: ' + err.message);
+                directionInfo.innerHTML = 'CSV load failed: ' + (err && err.message ? err.message : err);
+                throw err;
             }
         }
 
