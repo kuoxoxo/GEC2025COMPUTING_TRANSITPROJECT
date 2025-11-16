@@ -66,6 +66,8 @@
             padding: 10px;
             border-radius: 6px;
             white-space: pre-wrap;
+            max-height: 100px;
+            overflow-y: auto;
         }
     </style>
 </head>
@@ -75,7 +77,7 @@
 
     <div class="controls">
         <div>
-            <strong>CSV data</strong> — loading from ./csv_files/ (all 612+ stops)
+            <strong>CSV data</strong> — loading from ../csv_files/ (all 612+ stops)
         </div>
 
         <div class="row">
@@ -104,18 +106,13 @@
         </div>
 
         <div>
-            <div id="status" class="info">Status: idle</div>
+            <div id="status" class="info">Status: initializing...</div>
         </div>
     </div>
 
     <div id="map"></div>
 
     <script>
-        /* GTFS route viewer that loads real CSV files from ./csv_files/
-           - fetches stops.csv and stop_times.csv from server
-           - supports all 612+ stops
-        */
-
         const map = L.map('map').setView([43.5322, -80.2230], 15);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
 
@@ -135,7 +132,10 @@
         const clearBtn = document.getElementById('clearBtn');
         const statusEl = document.getElementById('status');
 
-        function status(msg) { statusEl.textContent = 'Status: ' + msg; }
+        function status(msg) {
+            statusEl.textContent = 'Status: ' + msg;
+            console.log(msg);
+        }
 
         function parseCSV(text) {
             if (!text) return [];
@@ -164,21 +164,22 @@
         }
 
         async function fetchCSV(path) {
-            try {
-                const res = await fetch(path);
-                if (!res.ok) throw new Error('HTTP ' + res.status);
-                const txt = await res.text();
-                return parseCSV(txt);
-            } catch (err) {
-                console.error('fetchCSV failed for', path, err);
-                throw err;
+            console.log('Fetching:', path);
+            const res = await fetch(path);
+            if (!res.ok) {
+                throw new Error(`HTTP ${res.status} for ${path}`);
             }
+            const txt = await res.text();
+            console.log(`Loaded ${path}: ${txt.length} chars, ${txt.split('\n').length} lines`);
+            return parseCSV(txt);
         }
 
         async function loadGTFS() {
             try {
-                status('fetching CSVs from ../csv_files/...');
+                status('fetching stops.csv...');
                 const stopsRows = await fetchCSV('../csv_files/stops.csv');
+
+                status('fetching stop_times.csv...');
                 const stopTimesRows = await fetchCSV('../csv_files/stop_times.csv');
 
                 // reset
@@ -186,18 +187,20 @@
                 stopsList.length = 0;
                 Object.keys(stopTimesByTrip).forEach(k => delete stopTimesByTrip[k]);
 
-                if (!stopsRows || stopsRows.length < 1) throw new Error('stops.csv missing or empty');
+                if (!stopsRows || stopsRows.length < 2) throw new Error(`stops.csv has ${stopsRows.length} rows (need >= 2)`);
 
                 const hdrStops = stopsRows[0].map(h => (h || '').toString().trim().toLowerCase());
                 let i_id = hdrStops.indexOf('stop_id');
                 let i_name = hdrStops.indexOf('stop_name');
                 let i_lat = hdrStops.indexOf('stop_lat');
                 let i_lon = hdrStops.indexOf('stop_lon');
+
                 if (i_id === -1) i_id = hdrStops.indexOf('id');
                 if (i_name === -1) i_name = hdrStops.indexOf('name');
                 if (i_lat === -1) i_lat = hdrStops.indexOf('lat');
                 if (i_lon === -1) i_lon = hdrStops.indexOf('lon');
 
+                console.log('stops.csv header:', stopsRows[0]);
                 console.log('stops.csv header mapping:', { i_id, i_name, i_lat, i_lon });
 
                 for (let r = 1; r < stopsRows.length; r++) {
@@ -213,14 +216,17 @@
                     stopsList.push(s);
                 }
 
+                console.log(`Parsed ${stopsList.length} stops`);
+
                 // parse stop_times
-                if (stopTimesRows && stopTimesRows.length > 0) {
+                if (stopTimesRows && stopTimesRows.length > 1) {
                     const hdrTimes = stopTimesRows[0].map(h => (h || '').toString().trim().toLowerCase());
                     const i_trip = hdrTimes.indexOf('trip_id') !== -1 ? hdrTimes.indexOf('trip_id') : hdrTimes.indexOf('trip');
                     const i_stop = hdrTimes.indexOf('stop_id') !== -1 ? hdrTimes.indexOf('stop_id') : hdrTimes.indexOf('stop');
                     let i_seq = hdrTimes.indexOf('stop_sequence');
                     if (i_seq === -1) { i_seq = hdrTimes.indexOf('stoporder'); if (i_seq === -1) i_seq = hdrTimes.indexOf('sequence'); }
 
+                    console.log('stop_times.csv header:', stopTimesRows[0]);
                     console.log('stop_times.csv header mapping:', { i_trip, i_stop, i_seq });
 
                     for (let r = 1; r < stopTimesRows.length; r++) {
@@ -235,13 +241,13 @@
                     }
                 }
 
+                console.log(`Parsed ${Object.keys(stopTimesByTrip).length} trips`);
+
                 populateSelects();
                 status(`loaded ${stopsList.length} stops, ${Object.keys(stopTimesByTrip).length} trips`);
-                console.log('Load complete:', { stops: stopsList.length, trips: Object.keys(stopTimesByTrip).length });
             } catch (err) {
-                console.error(err);
-                status('load error: ' + (err && err.message ? err.message : err));
-                alert('CSV load failed: ' + (err && err.message ? err.message : err));
+                console.error('ERROR:', err);
+                status('ERROR: ' + (err && err.message ? err.message : err));
             }
         }
 
@@ -323,7 +329,7 @@
             let origin = sId ? stops[sId] : findStop(startText.value);
             let final = eId ? stops[eId] : findStop(endText.value);
 
-            if (!origin || !final) { alert('Could not resolve both origin and final stops. Load GTFS and try again.'); return; }
+            if (!origin || !final) { alert('Could not resolve both origin and final stops.'); return; }
             if (origin.stop_id === final.stop_id) { alert('Origin and final are the same stop.'); return; }
 
             const seq = findTripSequence(origin.stop_id, final.stop_id);
@@ -339,8 +345,10 @@
         routeBtn.addEventListener('click', handleRoute);
         clearBtn.addEventListener('click', clearMap);
 
-        // auto load from server on open
-        loadGTFS();
+        // auto load on page open
+        window.addEventListener('load', () => {
+            setTimeout(loadGTFS, 500);
+        });
     </script>
 </body>
 
