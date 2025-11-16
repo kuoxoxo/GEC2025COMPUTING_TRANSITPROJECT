@@ -81,6 +81,16 @@
         </section>
     </main>
 
+    <!-- add these file inputs just above the (Re)Load CSVs button -->
+    <div style="margin-top:8px">
+        <label style="display:block;font-weight:600;margin-bottom:6px;">Or load CSV files from your computer</label>
+        <input id="stopsFile" type="file" accept=".csv" />
+        <input id="tripsFile" type="file" accept=".csv" />
+        <input id="stopTimesFile" type="file" accept=".csv" />
+        <div style="font-size:0.85rem;color:#555;margin-top:6px;">If you upload files they will be used instead of
+            fetching ./csv_files/*.csv</div>
+    </div>
+
     <script>
         /* ============================================================================
            GEC2025 GTFS Transit Route Viewer
@@ -145,188 +155,37 @@
         const calcDistanceBtn = document.getElementById('calcDistanceBtn');
         const analysisInfo = document.getElementById('analysisInfo');
 
-        /* ============================================================================
-           GEC2025-STYLE FUNCTIONS (C logic ported to JS)
-           ============================================================================ */
+        /* add these variables and helpers near the top of your existing script */
+        let stopsFileText = null, tripsFileText = null, stopTimesFileText = null;
 
-        /**
-         * find_stop_in_csv - Search for a stop by ID or name (case-insensitive)
-         * Mimics C: int find_stop_in_csv(const char* query)
-         */
-        function find_stop_in_csv(query) {
-            if (!query) return -1;
-            query = query.trim();
-            // exact ID match first
-            if (stops[query]) return 1; // found by ID
-            // substring name match
-            const q = query.toLowerCase();
-            for (const id in stops) {
-                if (stops[id].stop_name && stops[id].stop_name.toLowerCase().includes(q)) {
-                    return 1; // found by name
-                }
-            }
-            return 0; // not found
+        function readLocalFile(file, cb) {
+            if (!file) { cb(null); return; }
+            const fr = new FileReader();
+            fr.onload = () => cb(fr.result);
+            fr.onerror = () => cb(null);
+            fr.readAsText(file, 'utf-8');
         }
 
-        /**
-         * find_stops_in_trip - Get all stops in a trip sequence
-         * Mimics C: void find_stops_in_trip(trip_id)
-         */
-        function find_stops_in_trip(tripId) {
-            if (!stopTimesByTrip[tripId]) return [];
-            const seq = stopTimesByTrip[tripId].slice().sort((a, b) => a.stop_sequence - b.stop_sequence);
-            const out = [];
-            for (const st of seq) {
-                const s = stops[st.stop_id];
-                if (s) out.push({ ...s, stop_sequence: st.stop_sequence });
-            }
-            return out;
-        }
+        document.getElementById('stopsFile').addEventListener('change', (e) => {
+            readLocalFile(e.target.files[0], txt => { stopsFileText = txt; console.log('stops file loaded'); });
+        });
+        document.getElementById('tripsFile').addEventListener('change', (e) => {
+            readLocalFile(e.target.files[0], txt => { tripsFileText = txt; console.log('trips file loaded'); });
+        });
+        document.getElementById('stopTimesFile').addEventListener('change', (e) => {
+            readLocalFile(e.target.files[0], txt => { stopTimesFileText = txt; console.log('stop_times file loaded'); });
+        });
 
-        /**
-         * calculate_distance - Haversine distance between two lat/lon points (in km)
-         * Mimics C haversine calculation
-         */
-        function calculate_distance(lat1, lon1, lat2, lon2) {
-            const R = 6371; // Earth radius in km
-            const dLat = (lat2 - lat1) * Math.PI / 180;
-            const dLon = (lon2 - lon1) * Math.PI / 180;
-            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-                Math.sin(dLon / 2) * Math.sin(dLon / 2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-            return R * c;
-        }
-
-        /**
-         * analyze_route - Compute stats for a trip: total distance, stops, etc.
-         */
-        function analyze_route(tripId) {
-            const seq = find_stops_in_trip(tripId);
-            if (seq.length < 2) return null;
-            let totalDist = 0;
-            for (let i = 0; i < seq.length - 1; i++) {
-                const d = calculate_distance(seq[i].lat, seq[i].lon, seq[i + 1].lat, seq[i + 1].lon);
-                totalDist += d;
-            }
-            return {
-                trip_id: tripId,
-                num_stops: seq.length,
-                total_distance_km: totalDist.toFixed(2),
-                stops: seq
-            };
-        }
-
-        /**
-         * get_route_segment - Find shortest trip connecting two stops
-         */
-        function get_route_segment(originId, finalId) {
-            for (const tripId in stopTimesByTrip) {
-                const seq = stopTimesByTrip[tripId].slice().sort((a, b) => a.stop_sequence - b.stop_sequence);
-                let idxO = -1, idxF = -1;
-                for (let i = 0; i < seq.length; i++) {
-                    if (seq[i].stop_id === originId) idxO = i;
-                    if (seq[i].stop_id === finalId) { idxF = i; break; }
-                }
-                if (idxO >= 0 && idxF >= idxO) {
-                    const out = [];
-                    for (let i = idxO; i <= idxF; i++) {
-                        const s = stops[seq[i].stop_id];
-                        if (!s) { out.length = 0; break; }
-                        out.push(s);
-                    }
-                    if (out.length) return out;
-                }
-            }
-            return null;
-        }
-
-        /* Populate dropdowns from stopsList */
-        function populateStopSelects() {
-            startSelect.innerHTML = ''; endSelect.innerHTML = '';
-            const optClick = document.createElement('option');
-            optClick.value = ''; optClick.textContent = '-- choose or leave blank to use text input --';
-            startSelect.appendChild(optClick.cloneNode(true));
-            endSelect.appendChild(optClick.cloneNode(true));
-            for (const s of stopsList) {
-                const label = `${s.stop_name} (${s.stop_id})`;
-                const o1 = document.createElement('option'); o1.value = s.stop_id; o1.textContent = label;
-                const o2 = o1.cloneNode(true);
-                startSelect.appendChild(o1); endSelect.appendChild(o2);
-            }
-        }
-
-        /* Find stop by id or name */
-        function findStop(query) {
-            if (!query) return null;
-            query = query.trim();
-            if (stops[query]) return stops[query];
-            const q = query.toLowerCase();
-            for (const s of stopsList) {
-                if (s.stop_name && s.stop_name.toLowerCase().includes(q)) return s;
-            }
-            return null;
-        }
-
-        /* Clear previously drawn route */
-        function clearDrawn() {
-            if (drawn.poly) { map.removeLayer(drawn.poly); drawn.poly = null; }
-            drawn.markers.forEach(m => map.removeLayer(m)); drawn.markers = [];
-            directionInfo.innerHTML = '';
-        }
-
-        /* Draw sequence of stops */
-        function drawStopsSequence(seq) {
-            clearDrawn();
-            const latlngs = seq.map(s => [s.lat, s.lon]);
-            drawn.poly = L.polyline(latlngs, { color: '#1f78b4', weight: 4 }).addTo(map);
-            for (let i = 0; i < seq.length; i++) {
-                const s = seq[i];
-                const m = L.marker([s.lat, s.lon]).addTo(map).bindPopup(`${i === 0 ? 'Origin' : (i === seq.length - 1 ? 'Final' : 'Stop')}: ${s.stop_name} <br/>ID: ${s.stop_id}`);
-                drawn.markers.push(m);
-            }
-            map.fitBounds(drawn.poly.getBounds(), { padding: [20, 20] });
-            directionInfo.innerHTML = `Stops in route: ${seq.length}.`;
-        }
-
-        /* Compute route */
-        function computeRoute() {
-            const originId = startSelect.value || null;
-            const endId = endSelect.value || null;
-            let origin = null, final = null;
-
-            if (originId) origin = stops[originId];
-            if (endId) final = stops[endId];
-
-            if (!origin) origin = findStop(startText.value);
-            if (!final) final = findStop(endText.value);
-
-            if (!origin || !final) {
-                alert('Could not resolve both origin and final stops.');
-                return;
-            }
-            if (origin.stop_id === final.stop_id) { alert('Origin and final are the same stop.'); return; }
-
-            const seq = get_route_segment(origin.stop_id, final.stop_id);
-            if (!seq) {
-                alert('No trip found. Showing direct connection.');
-                drawStopsSequence([origin, final]);
-                return;
-            }
-            drawStopsSequence(seq);
-        }
-
-        /* Load CSVs */
+        /* replace or modify your loadGTFS() so it uses uploaded files when present */
         async function loadGTFS() {
             clearDrawn();
             directionInfo.innerHTML = 'Loading CSVs...';
             const base = './csv_files/';
             try {
-                const [stopsRows, tripsRows, stopTimesRows] = await Promise.all([
-                    fetchCSV(base + 'stops.csv'),
-                    fetchCSV(base + 'trips.csv').catch(() => null),
-                    fetchCSV(base + 'stop_times.csv')
-                ]);
+                // prefer uploaded files; fall back to fetch
+                const stopsRows = stopsFileText ? parseCSV(stopsFileText) : await fetchCSV(base + 'stops.csv');
+                const tripsRows = tripsFileText ? parseCSV(tripsFileText) : await fetchCSV(base + 'trips.csv').catch(() => null);
+                const stopTimesRows = stopTimesFileText ? parseCSV(stopTimesFileText) : await fetchCSV(base + 'stop_times.csv');
 
                 stopsList.length = 0;
                 for (const k in stops) delete stops[k];

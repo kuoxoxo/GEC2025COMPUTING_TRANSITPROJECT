@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  html, body, #map { height: 100%; margin: 0; padding: 0; }
+  .info { padding: 10px; background: white; border-radius: 5px; box-shadow: 0 0 15px rgba(0,0,0,0.2); }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  var map = L.map('map').setView([43.515476, -80.204101], 13);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+  var latlngs = [
+    [43.518121, -80.205662],
+    [43.516559, -80.203531],
+    [43.517582, -80.190917],
+    [43.515520, -80.188550],
+    [43.516422, -80.184692],
+    [43.519813, -80.180060],
+    [43.517582, -80.176815],
+    [43.514916, -80.175535],
+    [43.511751, -80.177128],
+    [43.508801, -80.181028],
+    [43.505968, -80.184808],
+    [43.504278, -80.186637],
+    [43.503155, -80.187971],
+    [43.504064, -80.190238],
+    [43.505774, -80.194329],
+    [43.509006, -80.195580],
+    [43.511014, -80.196427],
+    [43.514019, -80.199657],
+    [43.513616, -80.206704],
+    [43.511586, -80.209428],
+    [43.511076, -80.213566],
+    [43.512602, -80.218619],
+    [43.516094, -80.225959],
+    [43.517444, -80.230402],
+    [43.521654, -80.231246],
+    [43.524693, -80.227166],
+    [43.527268, -80.225600],
+    [43.530091, -80.225189],
+    [43.527350, -80.226117],
+    [43.525095, -80.227034],
+    [43.521917, -80.231306],
+    [43.520394, -80.233332]
+  ];
+  var polyline = L.polyline(latlngs, {color: 'blue', weight: 3, opacity: 0.7}).addTo(map);
+  var marker0 = L.marker([43.518121, -80.205662]).addTo(map)
+    .bindPopup('<b>Origin: Gordon at Landsdown southbound</b><br/>ID: 105<br/>Lat: 43.518121, Lon: -80.205662');
+  marker0.setIcon(L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-green.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34]}));
+  var marker1 = L.marker([43.516559, -80.203531]).addTo(map)
+    .bindPopup('<b>Stop: Gordon at Edinburgh southbound</b><br/>ID: 106<br/>Lat: 43.516559, Lon: -80.203531');
+  marker1.setIcon(L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-blue.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34]}));
+  var marker2 = L.marker([43.517582, -80.190917]).addTo(map)
+    .bindPopup('<b>Stop: Summerfield at Amsterdam southbound</b><br/>ID: 516<br/>Lat: 43.517582, Lon: -80.190917');
+  marker2.setIcon(L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-blue.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34]}));
+  var marker3 = L.marker([43.515520, -80.188550]).addTo(map)
+    .bindPopup('<b>Stop: Summerfield at Cummings southbound</b><br/>ID: 517<br/>Lat: 43.515520, Lon: -80.188550');
+  marker3.setIcon(L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-blue.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34]}));
+  var marker4 = L.marker([43.516422, -80.184692]).addTo(map)
+    .bindPopup('<b>Stop: Summerfield at Bright eastbound</b><br/>ID: 518<br/>Lat: 43.516422, Lon: -80.184692');
+  marker4.setIcon(L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-blue.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34]}));
+  var marker5 = L.marker([43.519813, -80.180060]).addTo(map)
+    .bindPopup('<b>Stop: Summerfield at Victoria eastbound</b><br/>ID: 519<br/>Lat: 43.519813, Lon: -80.180060');
+  marker5.setIcon(L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-blue.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34]}));
+  var marker6 = L.marker([43.517582, -80.176815]).addTo(map)
+    .bindPopup('<b>Stop: Victoria at Katemore southbound</b><br/>ID: 547<br/>Lat: 43.517582, Lon: -80.176815');
+  marker6.setIcon(L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-blue.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34]}));
+  var marker7 = L.marker([43.514916, -80.175535]).addTo(map)
+    .bindPopup('<b>Stop: Frederick at Waterford westbound</b><br/>ID: 520<br/>Lat: 43.514916, Lon: -80.175535');
+  marker7.setIcon(L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-blue.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34]}));
+  var marker8 = L.marker([43.511751, -80.177128]).addTo(map)
+    .bindPopup('<b>Stop: Goodwin at Ray westbound</b><br/>ID: 521<br/>Lat: 43.511751, Lon: -80.177128');
+  marker8.setIcon(L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-blue.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34]}));
+  var marker9 = L.marker([43.508801, -80.181028]).addTo(map)
+    .bindPopup('<b>Stop: Goodwin at Wilkie westbound</b><br/>ID: 522<br/>Lat: 43.508801, Lon: -80.181028');
+  marker9.setIcon(L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-blue.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34]}));
+  var marker10 = L.marker([43.505968, -80.184808]).addTo(map)
+    .bindPopup('<b>Stop: Goodwin at Sinclair westbound</b><br/>ID: 523<br/>Lat: 43.505968, Lon: -80.184808');
+  marker10.setIcon(L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-blue.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34]}));
+  var marker11 = L.marker([43.504278, -80.186637]).addTo(map)
+    .bindPopup('<b>Stop: Goodwin at Darling westbound</b><br/>ID: 524<br/>Lat: 43.504278, Lon: -80.186637');
+  marker11.setIcon(L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-blue.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34]}));
+  var marker12 = L.marker([43.503155, -80.187971]).addTo(map)
+    .bindPopup('<b>Stop: Goodwin at Eugene westbound</b><br/>ID: 525<br/>Lat: 43.503155, Lon: -80.187971');
+  marker12.setIcon(L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-blue.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34]}));
+  var marker13 = L.marker([43.504064, -80.190238]).addTo(map)
+    .bindPopup('<b>Stop: Farley at Eugene northbound</b><br/>ID: 526<br/>Lat: 43.504064, Lon: -80.190238');
+  marker13.setIcon(L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-blue.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34]}));
+  var marker14 = L.marker([43.505774, -80.194329]).addTo(map)
+    .bindPopup('<b>Stop: Gordon at Clairfields northbound</b><br/>ID: 1636<br/>Lat: 43.505774, Lon: -80.194329');
+  marker14.setIcon(L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-blue.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34]}));
+  var marker15 = L.marker([43.509006, -80.195580]).addTo(map)
+    .bindPopup('<b>Stop: Gordon at Lowes northbound</b><br/>ID: 528<br/>Lat: 43.509006, Lon: -80.195580');
+  marker15.setIcon(L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-blue.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34]}));
+  var marker16 = L.marker([43.511014, -80.196427]).addTo(map)
+    .bindPopup('<b>Stop: Gordon at Heritage northbound</b><br/>ID: 529<br/>Lat: 43.511014, Lon: -80.196427');
+  marker16.setIcon(L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-blue.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34]}));
+  var marker17 = L.marker([43.514019, -80.199657]).addTo(map)
+    .bindPopup('<b>Stop: Gordon at Arkell northbound</b><br/>ID: 5608<br/>Lat: 43.514019, Lon: -80.199657');
+  marker17.setIcon(L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-blue.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34]}));
+  var marker18 = L.marker([43.513616, -80.206704]).addTo(map)
+    .bindPopup('<b>Stop: Edinburgh at Carrington westbound</b><br/>ID: 107<br/>Lat: 43.513616, Lon: -80.206704');
+  marker18.setIcon(L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-blue.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34]}));
+  var marker19 = L.marker([43.511586, -80.209428]).addTo(map)
+    .bindPopup('<b>Stop: Edinburgh at Rickson westbound</b><br/>ID: 108<br/>Lat: 43.511586, Lon: -80.209428');
+  marker19.setIcon(L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-blue.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34]}));
+  var marker20 = L.marker([43.511076, -80.213566]).addTo(map)
+    .bindPopup('<b>Stop: Edinburgh at Ginger northbound</b><br/>ID: 109<br/>Lat: 43.511076, Lon: -80.213566');
+  marker20.setIcon(L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-blue.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34]}));
+  var marker21 = L.marker([43.512602, -80.218619]).addTo(map)
+    .bindPopup('<b>Stop: Edinburgh at Rodgers northbound</b><br/>ID: 110<br/>Lat: 43.512602, Lon: -80.218619');
+  marker21.setIcon(L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-blue.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34]}));
+  var marker22 = L.marker([43.516094, -80.225959]).addTo(map)
+    .bindPopup('<b>Stop: Edinburgh at Koch northbound</b><br/>ID: 111<br/>Lat: 43.516094, Lon: -80.225959');
+  marker22.setIcon(L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-blue.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34]}));
+  var marker23 = L.marker([43.517444, -80.230402]).addTo(map)
+    .bindPopup('<b>Stop: Edinburgh at Laurelwood northbound</b><br/>ID: 112<br/>Lat: 43.517444, Lon: -80.230402');
+  marker23.setIcon(L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-blue.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34]}));
+  var marker24 = L.marker([43.521654, -80.231246]).addTo(map)
+    .bindPopup('<b>Stop: 252 Stone eastbound</b><br/>ID: 1519<br/>Lat: 43.521654, Lon: -80.231246');
+  marker24.setIcon(L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-blue.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34]}));
+  var marker25 = L.marker([43.524693, -80.227166]).addTo(map)
+    .bindPopup('<b>Stop: Stone at Research eastbound</b><br/>ID: 1520<br/>Lat: 43.524693, Lon: -80.227166');
+  marker25.setIcon(L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-blue.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34]}));
+  var marker26 = L.marker([43.527268, -80.225600]).addTo(map)
+    .bindPopup('<b>Stop: Gordon at Stone northbound</b><br/>ID: 1647<br/>Lat: 43.527268, Lon: -80.225600');
+  marker26.setIcon(L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-blue.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34]}));
+  var marker27 = L.marker([43.530091, -80.225189]).addTo(map)
+    .bindPopup('<b>Stop: University Centre North Loop Platform 11</b><br/>ID: 5847<br/>Lat: 43.530091, Lon: -80.225189');
+  marker27.setIcon(L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-blue.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34]}));
+  var marker28 = L.marker([43.527350, -80.226117]).addTo(map)
+    .bindPopup('<b>Stop: Gordon at Stone southbound</b><br/>ID: 1606<br/>Lat: 43.527350, Lon: -80.226117');
+  marker28.setIcon(L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-blue.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34]}));
+  var marker29 = L.marker([43.525095, -80.227034]).addTo(map)
+    .bindPopup('<b>Stop: Stone at Research westbound</b><br/>ID: 1501<br/>Lat: 43.525095, Lon: -80.227034');
+  marker29.setIcon(L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-blue.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34]}));
+  var marker30 = L.marker([43.521917, -80.231306]).addTo(map)
+    .bindPopup('<b>Stop: 175 Stone westbound</b><br/>ID: 1503<br/>Lat: 43.521917, Lon: -80.231306');
+  marker30.setIcon(L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-blue.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34]}));
+  var marker31 = L.marker([43.520394, -80.233332]).addTo(map)
+    .bindPopup('<b>Final: Stone at Edinburgh westbound</b><br/>ID: 207<br/>Lat: 43.520394, Lon: -80.233332');
+  marker31.setIcon(L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-red.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34]}));
+  map.fitBounds(polyline.getBounds());
+</script>
+</body>
+</html>
