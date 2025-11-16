@@ -33,8 +33,104 @@ main {
     border-radius: 8px;
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
     margin-top: 10px;
-    /* ensure leaflet tiles fill rounded container on some browsers */
     overflow: hidden;
+    position: relative;
+}
+
+/* Lat/Lon overlay inside the map */
+#latlon.map-coords {
+    position: absolute;
+    left: 12px;
+    bottom: 12px;
+    background: rgba(255, 255, 255, 0.9);
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+    pointer-events: none;
+    z-index: 1000;
+}
+
+/* Directions controls */
+#directions-controls {
+    background: #fff;
+    border-radius: 8px;
+    padding: 12px;
+    margin-top: 12px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+
+#directions-controls h3 {
+    margin-top: 0;
+    margin-bottom: 12px;
+    color: #35424a;
+    font-size: 1.1rem;
+}
+
+#directions-controls label {
+    font-size: 0.9rem;
+    color: #333;
+    display: block;
+    margin-bottom: 4px;
+    font-weight: 600;
+}
+
+#directions-controls input[type="text"] {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 0.95rem;
+    box-sizing: border-box;
+    margin-bottom: 10px;
+    background: #fff;
+    cursor: pointer;
+}
+
+#directions-controls input[type="text"]:focus {
+    outline: none;
+    border-color: #35424a;
+    box-shadow: 0 0 0 2px rgba(53, 66, 74, 0.1);
+}
+
+#directions-controls button {
+    background: #35424a;
+    color: #fff;
+    border: none;
+    padding: 8px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: background 0.12s ease, transform 0.06s ease;
+    margin-right: 5px;
+    margin-bottom: 10px;
+}
+
+#directions-controls button:hover {
+    background: #2b3a42;
+}
+
+#directions-controls button:active {
+    transform: translateY(1px);
+}
+
+#directions-controls button.secondary {
+    background: #e6e6e6;
+    color: #222;
+}
+
+#directions-controls button.secondary:hover {
+    background: #d4d4d4;
+}
+
+#directionInfo {
+    margin-top: 10px;
+    font-size: 0.9rem;
+    color: #333;
+    background: #f8f8f8;
+    padding: 10px;
+    border-radius: 6px;
+    border-left: 4px solid #35424a;
 }
 
 /* Controls for routes (container used in index.html: #route-controls) */
@@ -44,16 +140,12 @@ main {
     padding: 12px;
     margin-top: 12px;
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 8px;
-    align-items: center;
 }
 
 /* Make the controls stack on small screens */
 @media (max-width: 680px) {
     #route-controls {
-        grid-template-columns: 1fr;
+        display: block;
     }
 }
 
@@ -63,6 +155,7 @@ main {
     color: #333;
     display: block;
     margin-bottom: 4px;
+    font-weight: 600;
 }
 
 #route-controls select,
@@ -75,14 +168,23 @@ main {
     width: 100%;
     box-sizing: border-box;
     background: #fff;
+    margin-bottom: 10px;
+}
+
+#route-controls select:focus,
+#route-controls input[type="color"]:focus,
+#route-controls textarea:focus {
+    outline: none;
+    border-color: #35424a;
+    box-shadow: 0 0 0 2px rgba(53, 66, 74, 0.1);
 }
 
 #route-controls textarea {
     resize: vertical;
     min-height: 90px;
     max-height: 260px;
-    font-family: inherit;
-    white-space: nowrap;
+    font-family: monospace;
+    white-space: pre;
     overflow-wrap: normal;
 }
 
@@ -96,6 +198,8 @@ main {
     cursor: pointer;
     font-weight: 600;
     transition: background 0.12s ease, transform 0.06s ease;
+    margin-right: 5px;
+    margin-bottom: 5px;
 }
 
 #route-controls button:hover {
@@ -121,6 +225,7 @@ main {
     display: flex;
     gap: 8px;
     align-items: center;
+    margin-bottom: 10px;
 }
 
 /* Small select / color input grouping */
