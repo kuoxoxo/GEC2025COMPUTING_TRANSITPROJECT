@@ -143,22 +143,20 @@
             return stopsData;
         }
 
-        // Generate sample trips connecting random stop sequences
+        // Generate sample trips with guaranteed sequential connections
         function generateTrips() {
             const tripsData = [];
+            // Create routes that go through sequential stops (S1->S2->S3, etc.)
             for (let t = 1; t <= 50; t++) {
-                const numStops = Math.floor(Math.random() * 10) + 3;
+                const startStop = Math.floor(Math.random() * 550) + 1;
+                const endStop = startStop + Math.floor(Math.random() * 50) + 5;
                 const stops = [];
-                let prev = -1;
-                for (let i = 0; i < numStops; i++) {
-                    let sid;
-                    do {
-                        sid = Math.floor(Math.random() * 612) + 1;
-                    } while (sid === prev);
-                    prev = sid;
-                    stops.push(`S${sid}`);
+                for (let s = startStop; s <= Math.min(endStop, 612); s++) {
+                    stops.push(`S${s}`);
                 }
-                tripsData.push({ trip_id: `TRIP${t}`, stops });
+                if (stops.length >= 3) {
+                    tripsData.push({ trip_id: `TRIP${t}`, stops });
+                }
             }
             return tripsData;
         }
