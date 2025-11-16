@@ -2,580 +2,314 @@
 <html lang="en">
 
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My C Code Portfolio</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>GEC2025 — GTFS route viewer</title>
     <link rel="stylesheet" href="style.css" />
-    <!-- Leaflet CSS for map styling -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <!-- Leaflet Routing Machine CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
-    <!-- Leaflet JS library for interactive maps -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <!-- Leaflet Routing Machine for directions -->
-    <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
 </head>
 
 <body>
-    <!-- Page header with title -->
     <header>
-        <h1>My C Programming Projects</h1>
+        <h1>GTFS route viewer (University of Guelph)</h1>
     </header>
-
-    <!-- Main content container -->
     <main>
-        <!-- First project section -->
         <section class="project">
-            <h2>Something</h2>
-            <p>HELLO WORLD</p>
-        </section>
+            <h2>Directions from GTFS</h2>
 
-        <!-- Second project section -->
-        <section class="project">
-            <h2>THing</h2>
-            <p>CRAZY goit</p>
-        </section>
+            <!-- Controls: either pick from dropdowns or type a name/ID -->
+            <div id="directions-controls">
+                <label for="startSelect">Start stop (dropdown)</label>
+                <select id="startSelect"></select>
 
-        <!-- Location & Map section -->
-        <section class="project">
-            <h2>Location & Directions (GTFS CSV)</h2>
+                <label for="endSelect">End stop (dropdown)</label>
+                <select id="endSelect"></select>
 
-            <!-- Map container - Leaflet will render here -->
-            <div id="map" style="width: 100%; height: 400px; border-radius: 8px; overflow: hidden;"></div>
+                <div style="margin:8px 0">— or —</div>
 
-            <!-- Lat/Lon display overlay (shows current mouse position on map) -->
-            <div id="latlon" class="map-coords">Lat: —   Lon: —</div>
+                <label for="startText">Start (name or id)</label>
+                <input id="startText" type="text" placeholder="e.g. S1 or 'University Centre'">
 
-            <!-- Directions controls: now uses stops loaded from CSVs -->
-            <div id="directions-controls" style="margin-top:12px;">
-                <h3>Get Directions (choose stops loaded from CSV)</h3>
+                <label for="endText">End (name or id)</label>
+                <input id="endText" type="text" placeholder="e.g. S3 or 'Macdonald Hall'">
 
-                <!-- Start / End selects populated from stops.csv -->
-                <label for="startSelect">Start Stop</label>
-                <select id="startSelect" style="width:100%;"></select>
-
-                <label for="endSelect">End Stop</label>
-                <select id="endSelect" style="width:100%; margin-bottom:8px;"></select>
-
-                <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                    <button id="getDirectionsBtn">Get Directions</button>
-                    <button id="clearDirectionsBtn" class="secondary">Clear</button>
-                    <button id="loadCsvBtn" class="secondary">(Re)Load CSVs</button>
+                <div style="margin-top:10px">
+                    <button id="loadCsvBtn">(Re)Load CSVs</button>
+                    <button id="getRouteBtn">Get Route</button>
+                    <button id="clearRouteBtn" class="secondary">Clear</button>
                 </div>
 
-                <div id="directionInfo" style="margin-top:10px;"></div>
+                <div id="directionInfo" style="margin-top:10px"></div>
             </div>
 
-            <!-- Route controls for manual routes (unchanged) -->
-            <div id="route-controls" style="margin-top:12px;">
-                <label for="routeSelect">Routes:</label>
-                <select id="routeSelect"></select>
-                <button id="newRouteBtn">New from textarea</button>
-                <button id="deleteRouteBtn">Delete</button>
-                <button id="clearAllBtn">Clear All</button>
-
-                <br /><br />
-
-                <label for="routeColor">Color:</label>
-                <input id="routeColor" type="color" value="#ff0000">
-                <button id="applyColorBtn">Apply</button>
-
-                <br /><br />
-
-                <label for="coordsTextarea">Coordinates (one "lat,lng" per line):</label><br />
-                <textarea id="coordsTextarea" rows="6" style="width:100%;"></textarea>
-
-                <br />
-
-                <button id="updateRouteBtn">Update Route</button>
-                <button id="exportGeoJsonBtn">Export GeoJSON (console)</button>
+            <div id="map"
+                style="width:100%;height:520px;margin-top:12px;border-radius:8px;overflow:hidden;position:relative">
             </div>
+        </section>
+
+        <section class="project" style="margin-top:18px;">
+            <h2>C source: gec2025.c</h2>
+            <p>
+                The repository contains gec2025.c at the project root. You can download it
+                directly or view the source below. (Requires the parent directory to be
+                served by your HTTP server so "../gec2025.c" is reachable.)
+            </p>
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+                <a id="downloadLink" href="../gec2025.c" download>Download gec2025.c</a>
+                <button id="reloadCBtn">Reload source</button>
+                <button id="toggleCBtn">Toggle view</button>
+            </div>
+
+            <details id="cDetails" open>
+                <summary>Show / hide C source</summary>
+                <pre id="csource"
+                    style="white-space:pre-wrap;max-height:520px;overflow:auto;background:#f7f7f7;padding:12px;border-radius:6px;border:1px solid #e1e1e1">Loading...</pre>
+            </details>
         </section>
     </main>
 
-    <!-- Main JavaScript logic -->
     <script>
-        // Wait for DOM to fully load before running code
-        document.addEventListener('DOMContentLoaded', function () {
-            // ============================================
-            // MAP & ROUTING INITIALIZATION
-            // ============================================
-            // Center on University of Guelph
-            const map = L.map('map').setView([43.5322, -80.2230], 15);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; OpenStreetMap contributors',
-                maxZoom: 19
-            }).addTo(map);
+        /* Integrated JS: loads GTFS CSVs, finds a trip that contains both stops,
+           extracts intermediate stops in-sequence and draws them on a Leaflet map.
+           Also fetches and displays the gec2025.c source file (served from parent dir). */
 
-            // routing control instance (created when needed)
-            let routingControl = null;
+        /* --- Helpers --- */
+        function parseCSV(text) {
+            const rows = [];
+            let i = 0, cur = [], field = '', inQuotes = false;
+            while (i < text.length) {
+                const ch = text[i];
+                if (inQuotes) {
+                    if (ch === '"') {
+                        if (text[i + 1] === '"') { field += '"'; i++; }
+                        else inQuotes = false;
+                    } else field += ch;
+                } else {
+                    if (ch === '"') inQuotes = true;
+                    else if (ch === ',') { cur.push(field); field = ''; }
+                    else if (ch === '\r') { }
+                    else if (ch === '\n') { cur.push(field); field = ''; rows.push(cur); cur = []; }
+                    else field += ch;
+                }
+                i++;
+            }
+            if (field !== '' || cur.length) { cur.push(field); rows.push(cur); }
+            return rows;
+        }
 
-            // markers for selected start/end
-            let startMarker = null;
-            let endMarker = null;
+        async function fetchCSV(path) {
+            const res = await fetch(path);
+            if (!res.ok) throw new Error('Fetch ' + path + ' failed: ' + res.status);
+            const txt = await res.text();
+            return parseCSV(txt);
+        }
 
-            // container for stops & routes parsed from CSVs
-            const stops = {};         // stop_id -> { stop_id, stop_name, lat, lon }
-            const stopsList = [];     // array of stops for ordering
-            const trips = {};         // trip_id -> { trip_id, route_id, direction_id, ... }
-            const stopTimes = {};     // trip_id -> [{stop_sequence, stop_id}, ...]
+        /* --- Map init --- */
+        const map = L.map('map').setView([43.5322, -80.2230], 15);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
 
-            // UI elements
-            const startSelect = document.getElementById('startSelect');
-            const endSelect = document.getElementById('endSelect');
-            const loadCsvBtn = document.getElementById('loadCsvBtn');
-            const getDirectionsBtn = document.getElementById('getDirectionsBtn');
-            const clearDirectionsBtn = document.getElementById('clearDirectionsBtn');
-            const directionInfo = document.getElementById('directionInfo');
+        let drawn = { poly: null, markers: [] };
 
-            // route-management state (existing)
-            const routes = {};
-            const routeSelect = document.getElementById('routeSelect');
-            const coordsTextarea = document.getElementById('coordsTextarea');
-            const routeColor = document.getElementById('routeColor');
-            let clickMarker = null;
+        /* --- Data containers --- */
+        const stops = {};       // stop_id -> {stop_id, stop_name, lat, lon}
+        const stopsList = [];   // array of stop objects (for select)
+        const stopTimesByTrip = {}; // trip_id -> [{stop_id, stop_sequence}, ...]
+        const trips = {};       // trip_id -> {trip_id, route_id, ...}
 
-            // helper: simple CSV parser that handles quoted fields
-            function parseCSV(text) {
-                const rows = [];
-                let i = 0;
-                let cur = [];
-                let field = '';
-                let inQuotes = false;
-                while (i < text.length) {
-                    const ch = text[i];
-                    if (inQuotes) {
-                        if (ch === '"') {
-                            if (text[i + 1] === '"') { field += '"'; i++; } // escaped quote
-                            else inQuotes = false;
-                        } else {
-                            field += ch;
-                        }
-                    } else {
-                        if (ch === '"') {
-                            inQuotes = true;
-                        } else if (ch === ',') {
-                            cur.push(field); field = '';
-                        } else if (ch === '\r') {
-                            // ignore
-                        } else if (ch === '\n') {
-                            cur.push(field); field = ''; rows.push(cur); cur = [];
-                        } else {
-                            field += ch;
-                        }
+        /* --- UI refs --- */
+        const startSelect = document.getElementById('startSelect');
+        const endSelect = document.getElementById('endSelect');
+        const startText = document.getElementById('startText');
+        const endText = document.getElementById('endText');
+        const loadCsvBtn = document.getElementById('loadCsvBtn');
+        const getRouteBtn = document.getElementById('getRouteBtn');
+        const clearRouteBtn = document.getElementById('clearRouteBtn');
+        const directionInfo = document.getElementById('directionInfo');
+
+        /* Populate dropdowns from stopsList */
+        function populateStopSelects() {
+            startSelect.innerHTML = ''; endSelect.innerHTML = '';
+            const optClick = document.createElement('option');
+            optClick.value = ''; optClick.textContent = '-- choose or leave blank to use text input --';
+            startSelect.appendChild(optClick.cloneNode(true));
+            endSelect.appendChild(optClick.cloneNode(true));
+            for (const s of stopsList) {
+                const label = `${s.stop_name} (${s.stop_id})`;
+                const o1 = document.createElement('option'); o1.value = s.stop_id; o1.textContent = label;
+                const o2 = o1.cloneNode(true);
+                startSelect.appendChild(o1); endSelect.appendChild(o2);
+            }
+        }
+
+        /* Find stop by id exact or by substring name (case-insensitive) */
+        function findStop(query) {
+            if (!query) return null;
+            query = query.trim();
+            if (stops[query]) return stops[query];
+            const q = query.toLowerCase();
+            for (const s of stopsList) {
+                if (s.stop_name && s.stop_name.toLowerCase().includes(q)) return s;
+            }
+            return null;
+        }
+
+        /* Find a trip that contains both originId and finalId and return sub-sequence of stop_ids in order */
+        function findTripSequence(originId, finalId) {
+            for (const tripId in stopTimesByTrip) {
+                const seq = stopTimesByTrip[tripId].slice().sort((a, b) => a.stop_sequence - b.stop_sequence);
+                let idxO = -1, idxF = -1;
+                for (let i = 0; i < seq.length; i++) {
+                    if (seq[i].stop_id === originId) idxO = i;
+                    if (seq[i].stop_id === finalId) { idxF = i; break; }
+                }
+                if (idxO >= 0 && idxF >= idxO) {
+                    const out = [];
+                    for (let i = idxO; i <= idxF; i++) {
+                        const s = stops[seq[i].stop_id];
+                        if (!s) { out.length = 0; break; }
+                        out.push(s);
                     }
-                    i++;
-                }
-                // last field/row
-                if (field !== '' || cur.length > 0) {
-                    cur.push(field);
-                    rows.push(cur);
-                }
-                return rows;
-            }
-
-            // load CSV by path and parse
-            async function fetchCSV(path) {
-                try {
-                    const res = await fetch(path);
-                    if (!res.ok) throw new Error('HTTP ' + res.status);
-                    const txt = await res.text();
-                    return parseCSV(txt);
-                } catch (err) {
-                    console.error('Failed to fetch', path, err);
-                    return null;
+                    if (out.length) return out;
                 }
             }
+            return null;
+        }
 
-            // Populate stop selects and add small markers for stops (optional)
-            function populateStopsMarkers() {
-                // Clear selects
-                startSelect.innerHTML = '';
-                endSelect.innerHTML = '';
+        /* Clear previously drawn route */
+        function clearDrawn() {
+            if (drawn.poly) { map.removeLayer(drawn.poly); drawn.poly = null; }
+            drawn.markers.forEach(m => map.removeLayer(m)); drawn.markers = [];
+            directionInfo.innerHTML = '';
+        }
 
-                // Add an option to choose by clicking instead of dropdown
-                const optClick = document.createElement('option');
-                optClick.value = '';
-                optClick.textContent = '-- Click map to pick --';
-                startSelect.appendChild(optClick.cloneNode(true));
-                endSelect.appendChild(optClick.cloneNode(true));
-
-                // Add stops alphabetically (or as loaded)
-                for (const s of stopsList) {
-                    const label = `${s.stop_name} (${s.stop_id})`;
-                    const opt1 = document.createElement('option');
-                    opt1.value = s.stop_id;
-                    opt1.textContent = label;
-                    startSelect.appendChild(opt1);
-
-                    const opt2 = opt1.cloneNode(true);
-                    endSelect.appendChild(opt2);
-
-                    // small grey marker for context (do not add too many if stops huge)
-                    if (stopsList.length <= 1000) {
-                        L.circleMarker([s.lat, s.lon], { radius: 4, color: '#666', fillOpacity: 0.6 }).addTo(map);
-                    }
-                }
+        /* Draw sequence of stops: markers + polyline */
+        function drawStopsSequence(seq) {
+            clearDrawn();
+            const latlngs = seq.map(s => [s.lat, s.lon]);
+            drawn.poly = L.polyline(latlngs, { color: '#1f78b4', weight: 4 }).addTo(map);
+            for (let i = 0; i < seq.length; i++) {
+                const s = seq[i];
+                const m = L.marker([s.lat, s.lon]).addTo(map).bindPopup(`${i === 0 ? 'Origin' : (i === seq.length - 1 ? 'Final' : 'Stop')}: ${s.stop_name} <br/>ID: ${s.stop_id}`);
+                drawn.markers.push(m);
             }
+            map.fitBounds(drawn.poly.getBounds(), { padding: [20, 20] });
+            directionInfo.innerHTML = `Stops in route: ${seq.length}.`;
+        }
 
-            // Create polyline routes from trips/stop_times using stops coords (limited number)
-            function buildRoutesFromGTFS(maxTrips = 50) {
-                // remove existing GTFS-derived routes
-                for (const r in routes) {
-                    if (r.startsWith('gtfs-')) {
-                        map.removeLayer(routes[r].poly);
-                        delete routes[r];
-                    }
-                }
+        /* Attempt to compute route from selected inputs */
+        function computeRoute() {
+            const originId = startSelect.value || null;
+            const endId = endSelect.value || null;
+            let origin = null, final = null;
 
-                let count = 0;
-                for (const trip_id in stopTimes) {
-                    if (count >= maxTrips) break;
-                    const seq = stopTimes[trip_id].slice().sort((a, b) => a.stop_sequence - b.stop_sequence);
-                    const latlngs = [];
-                    for (const s of seq) {
-                        const stop = stops[s.stop_id];
-                        if (stop) latlngs.push([stop.lat, stop.lon]);
-                    }
-                    if (latlngs.length >= 2) {
-                        const name = `gtfs-${trip_id}`;
-                        const color = (count % 2 === 0) ? '#c44' : '#246';
-                        const poly = L.polyline(latlngs, { color }).addTo(map);
-                        poly.bindPopup(`GTFS trip ${trip_id}`);
-                        routes[name] = { poly, color };
-                        const opt = document.createElement('option');
-                        opt.value = name;
-                        opt.textContent = name;
-                        routeSelect.appendChild(opt);
-                        count++;
-                    }
-                }
+            if (originId) origin = stops[originId];
+            if (endId) final = stops[endId];
+
+            if (!origin) origin = findStop(startText.value);
+            if (!final) final = findStop(endText.value);
+
+            if (!origin || !final) {
+                alert('Could not resolve both origin and final stops. Make sure CSVs loaded and inputs are correct.');
+                return;
             }
+            if (origin.stop_id === final.stop_id) { alert('Origin and final are the same stop.'); return; }
 
-            // set start/end markers and inputs from selected stop_id
-            function setStartFromStopId(stop_id) {
-                if (!stop_id) {
-                    if (startMarker) { map.removeLayer(startMarker); startMarker = null; }
-                    return;
-                }
-                const s = stops[stop_id];
-                if (!s) return;
-                if (startMarker) map.removeLayer(startMarker);
-                startMarker = L.marker([s.lat, s.lon], { title: s.stop_name }).addTo(map).bindPopup(`Start: ${s.stop_name}`).openPopup();
-                map.panTo([s.lat, s.lon]);
+            const seq = findTripSequence(origin.stop_id, final.stop_id);
+            if (!seq) {
+                alert('No trip found that contains both stops in order. Showing direct connection instead.');
+                drawStopsSequence([origin, final]);
+                return;
             }
-            function setEndFromStopId(stop_id) {
-                if (!stop_id) {
-                    if (endMarker) { map.removeLayer(endMarker); endMarker = null; }
-                    return;
-                }
-                const s = stops[stop_id];
-                if (!s) return;
-                if (endMarker) map.removeLayer(endMarker);
-                endMarker = L.marker([s.lat, s.lon], { title: s.stop_name }).addTo(map).bindPopup(`End: ${s.stop_name}`).openPopup();
-                map.panTo([s.lat, s.lon]);
-            }
+            drawStopsSequence(seq);
+        }
 
-            // Calculate directions between selected start/end stops using routing machine
-            function routeBetweenSelectedStops() {
-                const startId = startSelect.value;
-                const endId = endSelect.value;
-                if (!startId || !endId) {
-                    alert('Select both start and end stops (or click map to set them).');
-                    return;
-                }
-                const s = stops[startId];
-                const e = stops[endId];
-                if (!s || !e) { alert('Selected stops not found'); return; }
-
-                // place markers
-                setStartFromStopId(startId);
-                setEndFromStopId(endId);
-
-                // remove previous routing control
-                if (routingControl) map.removeControl(routingControl);
-
-                routingControl = L.Routing.control({
-                    waypoints: [L.latLng(s.lat, s.lon), L.latLng(e.lat, e.lon)],
-                    routeWhileDragging: false,
-                    showAlternatives: false,
-                    fitSelectedRoute: true,
-                    createMarker: function () { return null; } // we already place markers
-                }).addTo(map);
-
-                routingControl.on('routesfound', function (ev) {
-                    const summary = ev.routes[0].summary;
-                    directionInfo.innerHTML = `<strong>Distance:</strong> ${(summary.totalDistance / 1000).toFixed(2)} km &nbsp; <strong>Time:</strong> ${Math.round(summary.totalTime / 60)} min`;
-                });
-            }
-
-            // Clear routing and markers
-            function clearDirections() {
-                if (routingControl) { map.removeControl(routingControl); routingControl = null; }
-                if (startMarker) { map.removeLayer(startMarker); startMarker = null; }
-                if (endMarker) { map.removeLayer(endMarker); endMarker = null; }
-                startSelect.value = '';
-                endSelect.value = '';
-                directionInfo.innerHTML = '';
-            }
-
-            // Load GTFS-like CSVs (stops.csv, trips.csv, stop_times.csv) from csv_files/
-            async function loadGTFSCSVs() {
-                // adjust paths if your CSVs live elsewhere (csv_files/ used earlier)
-                const base = './csv_files/';
+        /* Load CSVs and build data structures */
+        async function loadGTFS() {
+            clearDrawn();
+            directionInfo.innerHTML = 'Loading CSVs...';
+            const base = './csv_files/';
+            try {
                 const [stopsRows, tripsRows, stopTimesRows] = await Promise.all([
                     fetchCSV(base + 'stops.csv'),
-                    fetchCSV(base + 'trips.csv'),
+                    fetchCSV(base + 'trips.csv').catch(() => null),
                     fetchCSV(base + 'stop_times.csv')
                 ]);
 
-                if (!stopsRows) { alert('Failed to load stops.csv'); return; }
-                // parse stops.csv header -> columns
-                const headerStops = stopsRows[0].map(h => h.trim());
-                const idx_stop_id = headerStops.indexOf('stop_id');
-                const idx_stop_name = headerStops.indexOf('stop_name');
-                const idx_lat = headerStops.indexOf('stop_lat');
-                const idx_lon = headerStops.indexOf('stop_lon');
-
-                // reset containers
-                Object.keys(stops).forEach(k => delete stops[k]);
                 stopsList.length = 0;
-                Object.keys(trips).forEach(k => delete trips[k]);
-                Object.keys(stopTimes).forEach(k => delete stopTimes[k]);
-                routeSelect.innerHTML = ''; // clear previous routes dropdown
-
-                // parse stops rows
+                for (const k in stops) delete stops[k];
+                if (!stopsRows || stopsRows.length < 2) throw new Error('stops.csv missing or empty');
+                const hdrStops = stopsRows[0].map(h => h.trim());
+                const i_id = hdrStops.indexOf('stop_id'), i_name = hdrStops.indexOf('stop_name'), i_lat = hdrStops.indexOf('stop_lat'), i_lon = hdrStops.indexOf('stop_lon');
                 for (let i = 1; i < stopsRows.length; i++) {
                     const r = stopsRows[i];
-                    // guard against malformed rows
-                    if (!r || r.length === 0) continue;
-                    const stop_id = (idx_stop_id >= 0 && idx_stop_id < r.length) ? r[idx_stop_id] : '';
-                    const stop_name = (idx_stop_name >= 0 && idx_stop_name < r.length) ? r[idx_stop_name] : stop_id;
-                    const lat = (idx_lat >= 0 && idx_lat < r.length) ? parseFloat(r[idx_lat]) : NaN;
-                    const lon = (idx_lon >= 0 && idx_lon < r.length) ? parseFloat(r[idx_lon]) : NaN;
-                    if (!stop_id || isNaN(lat) || isNaN(lon)) continue;
-                    stops[stop_id] = { stop_id, stop_name, lat, lon };
-                    stopsList.push(stops[stop_id]);
+                    if (!r) continue;
+                    const id = (i_id >= 0 && i_id < r.length) ? r[i_id].trim() : null;
+                    const name = (i_name >= 0 && i_name < r.length) ? r[i_name].trim() : id;
+                    const lat = (i_lat >= 0 && i_lat < r.length) ? parseFloat(r[i_lat]) : NaN;
+                    const lon = (i_lon >= 0 && i_lon < r.length) ? parseFloat(r[i_lon]) : NaN;
+                    if (!id || isNaN(lat) || isNaN(lon)) continue;
+                    const obj = { stop_id: id, stop_name: name, lat: lat, lon: lon };
+                    stops[id] = obj; stopsList.push(obj);
                 }
 
-                // parse trips.csv (optional use)
-                if (tripsRows) {
-                    const hdr = tripsRows[0].map(h => h.trim());
-                    const idx_trip_id = hdr.indexOf('trip_id');
-                    const idx_route_id = hdr.indexOf('route_id');
-                    for (let i = 1; i < tripsRows.length; i++) {
-                        const r = tripsRows[i];
-                        if (!r || r.length === 0) continue;
-                        const trip_id = (idx_trip_id >= 0 && idx_trip_id < r.length) ? r[idx_trip_id] : null;
-                        if (!trip_id) continue;
-                        trips[trip_id] = { trip_id, route_id: (idx_route_id >= 0 && idx_route_id < r.length) ? r[idx_route_id] : null };
-                    }
-                }
-
-                // parse stop_times.csv -> group by trip_id
-                if (stopTimesRows) {
+                for (const k in stopTimesByTrip) delete stopTimesByTrip[k];
+                if (stopTimesRows && stopTimesRows.length >= 2) {
                     const hdr = stopTimesRows[0].map(h => h.trim());
-                    const idx_trip = hdr.indexOf('trip_id');
-                    const idx_stopseq = hdr.indexOf('stop_sequence');
-                    const idx_stop = hdr.indexOf('stop_id');
+                    const i_trip = hdr.indexOf('trip_id'), i_stop = hdr.indexOf('stop_id'), i_seq = hdr.indexOf('stop_sequence');
                     for (let i = 1; i < stopTimesRows.length; i++) {
                         const r = stopTimesRows[i];
-                        if (!r || r.length === 0) continue;
-                        const trip_id = (idx_trip >= 0 && idx_trip < r.length) ? r[idx_trip] : null;
-                        const stop_id = (idx_stop >= 0 && idx_stop < r.length) ? r[idx_stop] : null;
-                        const stop_sequence = (idx_stopseq >= 0 && idx_stopseq < r.length) ? parseInt(r[idx_stopseq], 10) : 0;
-                        if (!trip_id || !stop_id) continue;
-                        stopTimes[trip_id] = stopTimes[trip_id] || [];
-                        stopTimes[trip_id].push({ stop_id, stop_sequence });
+                        if (!r) continue;
+                        const tid = (i_trip >= 0 && i_trip < r.length) ? r[i_trip].trim() : null;
+                        const sid = (i_stop >= 0 && i_stop < r.length) ? r[i_stop].trim() : null;
+                        const seq = (i_seq >= 0 && i_seq < r.length) ? parseInt(r[i_seq], 10) : i;
+                        if (!tid || !sid) continue;
+                        stopTimesByTrip[tid] = stopTimesByTrip[tid] || [];
+                        stopTimesByTrip[tid].push({ stop_id: sid, stop_sequence: seq });
                     }
                 }
 
-                // populate selects and draw some GTFS routes
-                populateStopsMarkers();
-                buildRoutesFromGTFS(40);
-                alert('CSV load complete: stops=' + stopsList.length + ', trips=' + Object.keys(stopTimes).length);
+                populateStopSelects();
+                directionInfo.innerHTML = `Loaded stops: ${stopsList.length}, trips (stop_times groups): ${Object.keys(stopTimesByTrip).length}`;
+            } catch (err) {
+                console.error(err);
+                alert('CSV load failed: ' + err.message);
+                directionInfo.innerHTML = 'CSV load failed';
             }
+        }
 
-            // wire UI actions for CSV loading & directions
-            loadCsvBtn.addEventListener('click', () => loadGTFSCSVs());
-            getDirectionsBtn.addEventListener('click', routeBetweenSelectedStops);
-            clearDirectionsBtn.addEventListener('click', clearDirections);
+        /* --- UI wiring --- */
+        loadCsvBtn.addEventListener('click', () => loadGTFS());
+        getRouteBtn.addEventListener('click', () => computeRoute());
+        clearRouteBtn.addEventListener('click', () => clearDrawn());
 
-            // allow map clicks to set start/end when user selects the "-- Click map to pick --" option
-            map.on('click', function (e) {
-                // if startSelect value is empty (user chose click selection) set start, else if endSelect empty set end
-                if (startSelect.value === '') {
-                    // find nearest stop (simple nearest-by-distance) and select it
-                    let nearest = null;
-                    let nd = Infinity;
-                    for (const s of stopsList) {
-                        const d = Math.hypot(s.lat - e.latlng.lat, s.lon - e.latlng.lng);
-                        if (d < nd) { nd = d; nearest = s; }
-                    }
-                    if (nearest) {
-                        startSelect.value = nearest.stop_id;
-                        setStartFromStopId(nearest.stop_id);
-                    } else {
-                        // if no stops loaded, place a temporary marker and set startSelect empty
-                        if (startMarker) map.removeLayer(startMarker);
-                        startMarker = L.marker(e.latlng).addTo(map).bindPopup('Start (custom)').openPopup();
-                    }
-                } else if (endSelect.value === '') {
-                    let nearest = null;
-                    let nd = Infinity;
-                    for (const s of stopsList) {
-                        const d = Math.hypot(s.lat - e.latlng.lat, s.lon - e.latlng.lng);
-                        if (d < nd) { nd = d; nearest = s; }
-                    }
-                    if (nearest) {
-                        endSelect.value = nearest.stop_id;
-                        setEndFromStopId(nearest.stop_id);
-                    } else {
-                        if (endMarker) map.removeLayer(endMarker);
-                        endMarker = L.marker(e.latlng).addTo(map).bindPopup('End (custom)').openPopup();
-                    }
-                }
-            });
+        /* initial load on open */
+        loadGTFS();
 
-            // =========================================================
-            // Existing route management UI (unchanged) - kept for manual routes
-            // (functions addRoute, parseCoords, populateTextareaForSelected etc.)
-            // =========================================================
+        /* --- Fetch and display gec2025.c source (served from parent directory) --- */
+        const cpre = document.getElementById('csource');
+        const reloadCBtn = document.getElementById('reloadCBtn');
+        const toggleCBtn = document.getElementById('toggleCBtn');
 
-            function addRoute(name, latlngs, color) {
-                if (routes[name]) {
-                    alert('Route with that name already exists.');
-                    return;
-                }
-                const poly = L.polyline(latlngs, { color: color || '#ff0000' }).addTo(map);
-                poly.bindPopup(name);
-                routes[name] = { poly, color: color || '#ff0000' };
-                const opt = document.createElement('option');
-                opt.value = name;
-                opt.textContent = name;
-                routeSelect.appendChild(opt);
-                routeSelect.value = name;
-                populateTextareaForSelected();
-                fitMapToRoute(poly);
+        async function loadCSource() {
+            cpre.textContent = 'Loading...';
+            try {
+                const res = await fetch('../gec2025.c');
+                if (!res.ok) throw new Error('Fetch failed: ' + res.status);
+                const txt = await res.text();
+                cpre.textContent = txt;
+            } catch (err) {
+                cpre.textContent = 'Failed to load gec2025.c: ' + err.message + '\n\nEnsure the server serves the project root (parent of docs/) so ../gec2025.c is accessible.';
             }
+        }
 
-            function parseCoords(text) {
-                const lines = text.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
-                const latlngs = [];
-                for (const l of lines) {
-                    const parts = l.split(',').map(p => p.trim());
-                    if (parts.length !== 2) continue;
-                    const lat = parseFloat(parts[0]);
-                    const lng = parseFloat(parts[1]);
-                    if (!isNaN(lat) && !isNaN(lng)) latlngs.push([lat, lng]);
-                }
-                return latlngs;
-            }
-
-            function populateTextareaForSelected() {
-                const name = routeSelect.value;
-                if (!name || !routes[name]) { coordsTextarea.value = ''; return; }
-                const latlngs = routes[name].poly.getLatLngs();
-                coordsTextarea.value = latlngs.map(p => p.lat + ',' + p.lng).join('\n');
-                routeColor.value = routes[name].color || '#ff0000';
-            }
-
-            function updateSelectedRoute() {
-                const name = routeSelect.value;
-                if (!name || !routes[name]) { alert('Select a route'); return; }
-                const latlngs = parseCoords(coordsTextarea.value);
-                if (latlngs.length < 2) { alert('Provide at least 2 coordinates'); return; }
-                routes[name].poly.setLatLngs(latlngs);
-                fitMapToRoute(routes[name].poly);
-            }
-
-            function deleteSelectedRoute() {
-                const name = routeSelect.value;
-                if (!name || !routes[name]) return;
-                map.removeLayer(routes[name].poly);
-                delete routes[name];
-                for (let i = 0; i < routeSelect.options.length; i++) {
-                    if (routeSelect.options[i].value === name) routeSelect.remove(i);
-                }
-                if (routeSelect.options.length > 0) {
-                    routeSelect.selectedIndex = 0;
-                    populateTextareaForSelected();
-                } else {
-                    coordsTextarea.value = '';
-                }
-            }
-
-            function clearAllRoutes() {
-                for (const name in routes) {
-                    map.removeLayer(routes[name].poly);
-                }
-                Object.keys(routes).forEach(k => delete routes[k]);
-                routeSelect.innerHTML = '';
-                coordsTextarea.value = '';
-            }
-
-            function fitMapToRoute(poly) {
-                try { map.fitBounds(poly.getBounds(), { padding: [20, 20] }); }
-                catch (e) { }
-            }
-
-            function applyColorToSelected() {
-                const name = routeSelect.value;
-                if (!name || !routes[name]) { alert('Select a route'); return; }
-                const color = routeColor.value;
-                routes[name].poly.setStyle({ color });
-                routes[name].color = color;
-            }
-
-            function exportGeoJsonSelected() {
-                const name = routeSelect.value;
-                if (!name || !routes[name]) { alert('Select a route'); return; }
-                const gj = routes[name].poly.toGeoJSON();
-                console.log(JSON.stringify(gj, null, 2));
-                alert('GeoJSON printed to console.');
-            }
-
-            // sample manual routes (kept)
-            addRoute('Campus Loop A', [
-                [43.5330, -80.2240],
-                [43.5325, -80.2225],
-                [43.5315, -80.2235],
-                [43.5322, -80.2250]
-            ], '#ff0000');
-
-            addRoute('Campus Loop B', [
-                [43.5328, -80.2260],
-                [43.5318, -80.2250],
-                [43.5308, -80.2245],
-                [43.5315, -80.2230]
-            ], '#0000ff');
-
-            // UI wiring for manual route buttons
-            document.getElementById('newRouteBtn').addEventListener('click', function () {
-                const text = coordsTextarea.value.trim();
-                if (!text) { alert('Paste coordinates into the textarea first'); return; }
-                const latlngs = parseCoords(text);
-                if (latlngs.length < 2) { alert('Need at least 2 coordinates'); return; }
-                const name = prompt('Name for new route:', 'Route ' + (Object.keys(routes).length + 1));
-                if (!name) return;
-                addRoute(name, latlngs, routeColor.value);
-            });
-            document.getElementById('updateRouteBtn').addEventListener('click', updateSelectedRoute);
-            document.getElementById('deleteRouteBtn').addEventListener('click', function () {
-                if (!confirm('Delete selected route?')) return;
-                deleteSelectedRoute();
-            });
-            document.getElementById('clearAllBtn').addEventListener('click', function () {
-                if (!confirm('Clear all routes?')) return;
-                clearAllRoutes();
-            });
-            document.getElementById('applyColorBtn').addEventListener('click', applyColorToSelected);
-            document.getElementById('exportGeoJsonBtn').addEventListener('click', exportGeoJsonSelected);
-            routeSelect.addEventListener('change', populateTextareaForSelected);
-
-            // initial CSV load attempt (user can reload with button)
-            loadGTFSCSVs();
+        reloadCBtn.addEventListener('click', loadCSource);
+        toggleCBtn.addEventListener('click', () => {
+            const d = document.getElementById('cDetails');
+            d.open = !d.open;
         });
+        loadCSource();
+
     </script>
 </body>
 
