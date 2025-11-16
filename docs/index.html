@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>My C Code Portfolio</title>
     <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- Map -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 </head>
 
@@ -33,23 +33,7 @@
             <!-- Lat/Lon display (overlay) -->
             <div id="latlon" class="map-coords">Lat: —   Lon: —</div>
 
-            <!-- Route controls -->
-            <div id="route-controls" style="margin-top:12px;">
-                <label for="routeSelect">Routes:</label>
-                <select id="routeSelect"></select>
-                <button id="newRouteBtn">New from textarea</button>
-                <button id="deleteRouteBtn">Delete</button>
-                <button id="clearAllBtn">Clear All</button>
-                <br /><br />
-                <label for="routeColor">Color:</label>
-                <input id="routeColor" type="color" value="#ff0000">
-                <button id="applyColorBtn">Apply</button>
-                <br /><br />
-                <label for="coordsTextarea">Coordinates (one "lat,lng" per line):</label><br />
-                <textarea id="coordsTextarea" rows="6" style="width:100%;"></textarea>
-                <br />
-                <button id="updateRouteBtn">Update Route</button>
-                <button id="exportGeoJsonBtn">Export GeoJSON (console)</button>
+           
             </div>
         </section>
     </main>
@@ -67,112 +51,8 @@
 
             // add a marker at the campus center
             const campusMarker = L.marker([43.5322, -80.2230]).addTo(map)
-                .bindPopup('University of Guelph (approx)').openPopup();
+                .bindPopup('University of Guelph').openPopup();
 
-            // storage for route objects: { name: { polyline, color } }
-            const routes = {};
-            const routeSelect = document.getElementById('routeSelect');
-            const coordsTextarea = document.getElementById('coordsTextarea');
-            const routeColor = document.getElementById('routeColor');
-
-            // marker used when user clicks map
-            let clickMarker = null;
-
-            function addRoute(name, latlngs, color) {
-                if (routes[name]) {
-                    alert('Route with that name already exists.');
-                    return;
-                }
-                const poly = L.polyline(latlngs, { color: color || '#ff0000' }).addTo(map);
-                poly.bindPopup(name);
-                routes[name] = { poly, color: color || '#ff0000' };
-                const opt = document.createElement('option');
-                opt.value = name;
-                opt.textContent = name;
-                routeSelect.appendChild(opt);
-                routeSelect.value = name;
-                populateTextareaForSelected();
-                fitMapToRoute(poly);
-            }
-
-            function parseCoords(text) {
-                const lines = text.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
-                const latlngs = [];
-                for (const l of lines) {
-                    const parts = l.split(',').map(p => p.trim());
-                    if (parts.length !== 2) continue;
-                    const lat = parseFloat(parts[0]);
-                    const lng = parseFloat(parts[1]);
-                    if (!isNaN(lat) && !isNaN(lng)) latlngs.push([lat, lng]);
-                }
-                return latlngs;
-            }
-
-            function populateTextareaForSelected() {
-                const name = routeSelect.value;
-                if (!name || !routes[name]) { coordsTextarea.value = ''; return; }
-                const latlngs = routes[name].poly.getLatLngs();
-                coordsTextarea.value = latlngs.map(p => p.lat + ',' + p.lng).join('\n');
-                routeColor.value = routes[name].color || '#ff0000';
-            }
-
-            function updateSelectedRoute() {
-                const name = routeSelect.value;
-                if (!name || !routes[name]) { alert('Select a route'); return; }
-                const latlngs = parseCoords(coordsTextarea.value);
-                if (latlngs.length < 2) { alert('Provide at least 2 coordinates'); return; }
-                routes[name].poly.setLatLngs(latlngs);
-                fitMapToRoute(routes[name].poly);
-            }
-
-            function deleteSelectedRoute() {
-                const name = routeSelect.value;
-                if (!name || !routes[name]) return;
-                map.removeLayer(routes[name].poly);
-                delete routes[name];
-                // remove option
-                for (let i = 0; i < routeSelect.options.length; i++) {
-                    if (routeSelect.options[i].value === name) routeSelect.remove(i);
-                }
-                if (routeSelect.options.length > 0) {
-                    routeSelect.selectedIndex = 0;
-                    populateTextareaForSelected();
-                } else {
-                    coordsTextarea.value = '';
-                }
-            }
-
-            function clearAllRoutes() {
-                for (const name in routes) {
-                    map.removeLayer(routes[name].poly);
-                }
-                Object.keys(routes).forEach(k => delete routes[k]);
-                routeSelect.innerHTML = '';
-                coordsTextarea.value = '';
-            }
-
-            function fitMapToRoute(poly) {
-                try { map.fitBounds(poly.getBounds(), { padding: [20, 20] }); }
-                catch (e) { }
-            }
-
-            function applyColorToSelected() {
-                const name = routeSelect.value;
-                if (!name || !routes[name]) { alert('Select a route'); return; }
-                const color = routeColor.value;
-                routes[name].poly.setStyle({ color });
-                routes[name].color = color;
-            }
-
-            function exportGeoJsonSelected() {
-                const name = routeSelect.value;
-                if (!name || !routes[name]) { alert('Select a route'); return; }
-                const gj = routes[name].poly.toGeoJSON();
-                console.log(JSON.stringify(gj, null, 2));
-                alert('GeoJSON printed to console.');
-            }
-
-            // sample routes around University of Guelph campus
             addRoute('Campus Loop A', [
                 [43.5330, -80.2240],
                 [43.5325, -80.2225],
