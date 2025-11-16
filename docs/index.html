@@ -111,44 +111,20 @@
     <div id="map"></div>
 
     <script>
-        /* Minimal GTFS route viewer with embedded CSVs:
-           - stopsCsv / stopTimesCsv / tripsCsv are included below
-           - page no longer asks for CSV files from the user
+        /* GTFS route viewer that loads real CSV files from ./csv_files/
+           - fetches stops.csv and stop_times.csv
+           - supports all 612+ stops
         */
 
-        // --- EMBEDDED CSV DATA (edit as needed) ---
-        const stopsCsv = `stop_id,stop_name,stop_lat,stop_lon
-S1,Macdonald Hall,43.5325,-80.2231
-S2,University Centre,43.5328,-80.2240
-S3,Stone Road Mall,43.5290,-80.2450
-S4,East Parkade,43.5340,-80.2210
-`;
-
-        const stopTimesCsv = `trip_id,arrival_time,departure_time,stop_id,stop_sequence
-TRIP1,08:00:00,08:00:00,S1,1
-TRIP1,08:05:00,08:05:00,S2,2
-TRIP1,08:20:00,08:20:00,S3,3
-TRIP2,09:00:00,09:00:00,S4,1
-TRIP2,09:10:00,09:10:00,S2,2
-TRIP2,09:25:00,09:25:00,S3,3
-`;
-
-        // optional, not strictly required by current logic but included for completeness
-        const tripsCsv = `route_id,service_id,trip_id
-R1,WD,TRIP1
-R2,WD,TRIP2
-`;
-
-        // --- existing app code (adapted to use embedded strings) ---
         const map = L.map('map').setView([43.5322, -80.2230], 15);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
 
         let polyLayer = null;
         let markerLayers = [];
 
-        const stops = {};          // stop_id -> {stop_id, stop_name, lat, lon}
-        const stopsList = [];      // array of stops
-        const stopTimesByTrip = {}; // trip_id -> [{stop_id, stop_sequence}, ...]
+        const stops = {};
+        const stopsList = [];
+        const stopTimesByTrip = {};
 
         const loadBtn = document.getElementById('loadBtn');
         const startSelect = document.getElementById('startSelect');
