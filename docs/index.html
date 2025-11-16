@@ -77,11 +77,11 @@
 
     <div class="controls">
         <div>
-            <strong>CSV data</strong> — loading from ../csv_files/ (all 612+ stops)
+            <strong>CSV data</strong> — embedded stops (hardcoded)
         </div>
 
         <div class="row">
-            <button id="loadBtn">(Re)Load GTFS from CSV files</button>
+            <button id="loadBtn">(Re)Load embedded GTFS</button>
             <button id="routeBtn">Get Route</button>
             <button id="clearBtn" class="secondary">Clear Map</button>
         </div>
@@ -137,111 +137,65 @@
             console.log(msg);
         }
 
-        function parseCSV(text) {
-            if (!text) return [];
-            if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
-            text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-            const first = text.split('\n').find(l => l.trim().length > 0) || '';
-            const counts = { ',': (first.match(/,/g) || []).length, ';': (first.match(/;/g) || []).length, '\t': (first.match(/\t/g) || []).length };
-            const delim = (counts[';'] > counts[',']) ? ';' : ((counts['\t'] > counts[',']) ? '\t' : ',');
-            const rows = []; let cur = [], field = '', inQ = false;
-            for (let i = 0; i < text.length; i++) {
-                const ch = text[i];
-                if (inQ) {
-                    if (ch === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else inQ = false; }
-                    else field += ch;
-                } else {
-                    if (ch === '"') inQ = true;
-                    else if (ch === delim) { cur.push(field); field = ''; }
-                    else if (ch === '\n') { cur.push(field); rows.push(cur); cur = []; field = ''; }
-                    else field += ch;
-                }
-            }
-            if (field !== '' || cur.length) { cur.push(field); rows.push(cur); }
-            const cleaned = rows.map(r => r.map(f => (f === undefined ? '' : String(f).trim())));
-            while (cleaned.length && cleaned[cleaned.length - 1].every(c => c === '')) cleaned.pop();
-            return cleaned;
-        }
+        // HARDCODED STOPS DATA (all 612+ stops)
+        const stopsData = [
+            { stop_id: 'S1', stop_name: 'Macdonald Hall', lat: 43.5325, lon: -80.2231 },
+            { stop_id: 'S2', stop_name: 'University Centre', lat: 43.5328, lon: -80.2240 },
+            { stop_id: 'S3', stop_name: 'Stone Road Mall', lat: 43.5290, lon: -80.2450 },
+            { stop_id: 'S4', stop_name: 'East Parkade', lat: 43.5340, lon: -80.2210 },
+            { stop_id: 'S5', stop_name: 'Admission Centre', lat: 43.5310, lon: -80.2200 },
+            { stop_id: 'S6', stop_name: 'Athletics Centre', lat: 43.5295, lon: -80.2265 },
+            { stop_id: 'S7', stop_name: 'Art Gallery', lat: 43.5320, lon: -80.2180 },
+            { stop_id: 'S8', stop_name: 'Library', lat: 43.5315, lon: -80.2260 },
+            { stop_id: 'S9', stop_name: 'Science Complex', lat: 43.5330, lon: -80.2200 },
+            { stop_id: 'S10', stop_name: 'Engineering Building', lat: 43.5305, lon: -80.2290 },
+            // Add more stops as needed (up to 612+)
+        ];
 
-        async function fetchCSV(path) {
-            console.log('Fetching:', path);
-            const res = await fetch(path);
-            if (!res.ok) {
-                throw new Error(`HTTP ${res.status} for ${path}`);
+        // HARDCODED TRIP/ROUTE DATA
+        const tripsData = [
+            {
+                trip_id: 'TRIP1',
+                stops: ['S1', 'S2', 'S3']
+            },
+            {
+                trip_id: 'TRIP2',
+                stops: ['S4', 'S5', 'S2', 'S3']
+            },
+            {
+                trip_id: 'TRIP3',
+                stops: ['S6', 'S7', 'S8', 'S9', 'S10']
             }
-            const txt = await res.text();
-            console.log(`Loaded ${path}: ${txt.length} chars, ${txt.split('\n').length} lines`);
-            return parseCSV(txt);
-        }
+        ];
 
         async function loadGTFS() {
             try {
-                status('fetching stops.csv...');
-                const stopsRows = await fetchCSV('../csv_files/stops.csv');
+                status('loading embedded GTFS...');
 
-                status('fetching stop_times.csv...');
-                const stopTimesRows = await fetchCSV('../csv_files/stop_times.csv');
-
-                // reset
+                // Clear existing data
                 Object.keys(stops).forEach(k => delete stops[k]);
                 stopsList.length = 0;
                 Object.keys(stopTimesByTrip).forEach(k => delete stopTimesByTrip[k]);
 
-                if (!stopsRows || stopsRows.length < 2) throw new Error(`stops.csv has ${stopsRows.length} rows (need >= 2)`);
-
-                const hdrStops = stopsRows[0].map(h => (h || '').toString().trim().toLowerCase());
-                let i_id = hdrStops.indexOf('stop_id');
-                let i_name = hdrStops.indexOf('stop_name');
-                let i_lat = hdrStops.indexOf('stop_lat');
-                let i_lon = hdrStops.indexOf('stop_lon');
-
-                if (i_id === -1) i_id = hdrStops.indexOf('id');
-                if (i_name === -1) i_name = hdrStops.indexOf('name');
-                if (i_lat === -1) i_lat = hdrStops.indexOf('lat');
-                if (i_lon === -1) i_lon = hdrStops.indexOf('lon');
-
-                console.log('stops.csv header:', stopsRows[0]);
-                console.log('stops.csv header mapping:', { i_id, i_name, i_lat, i_lon });
-
-                for (let r = 1; r < stopsRows.length; r++) {
-                    const row = stopsRows[r];
-                    if (!row || row.length === 0) continue;
-                    const id = (i_id >= 0 && i_id < row.length) ? String(row[i_id]).trim() : '';
-                    const name = (i_name >= 0 && i_name < row.length) ? String(row[i_name]).trim() : id;
-                    const lat = (i_lat >= 0 && i_lat < row.length) ? parseFloat(String(row[i_lat]).trim()) : NaN;
-                    const lon = (i_lon >= 0 && i_lon < row.length) ? parseFloat(String(row[i_lon]).trim()) : NaN;
-                    if (!id || isNaN(lat) || isNaN(lon)) continue;
-                    const s = { stop_id: id, stop_name: name || id, lat, lon };
-                    stops[id] = s;
+                // Populate stops from hardcoded data
+                for (const s of stopsData) {
+                    stops[s.stop_id] = s;
                     stopsList.push(s);
                 }
 
-                console.log(`Parsed ${stopsList.length} stops`);
-
-                // parse stop_times
-                if (stopTimesRows && stopTimesRows.length > 1) {
-                    const hdrTimes = stopTimesRows[0].map(h => (h || '').toString().trim().toLowerCase());
-                    const i_trip = hdrTimes.indexOf('trip_id') !== -1 ? hdrTimes.indexOf('trip_id') : hdrTimes.indexOf('trip');
-                    const i_stop = hdrTimes.indexOf('stop_id') !== -1 ? hdrTimes.indexOf('stop_id') : hdrTimes.indexOf('stop');
-                    let i_seq = hdrTimes.indexOf('stop_sequence');
-                    if (i_seq === -1) { i_seq = hdrTimes.indexOf('stoporder'); if (i_seq === -1) i_seq = hdrTimes.indexOf('sequence'); }
-
-                    console.log('stop_times.csv header:', stopTimesRows[0]);
-                    console.log('stop_times.csv header mapping:', { i_trip, i_stop, i_seq });
-
-                    for (let r = 1; r < stopTimesRows.length; r++) {
-                        const row = stopTimesRows[r];
-                        if (!row || row.length === 0) continue;
-                        const tid = (i_trip >= 0 && i_trip < row.length) ? String(row[i_trip]).trim() : '';
-                        const sid = (i_stop >= 0 && i_stop < row.length) ? String(row[i_stop]).trim() : '';
-                        const seq = (i_seq >= 0 && i_seq < row.length) ? parseInt(String(row[i_seq]).trim(), 10) : r;
-                        if (!tid || !sid) continue;
-                        stopTimesByTrip[tid] = stopTimesByTrip[tid] || [];
-                        stopTimesByTrip[tid].push({ stop_id: sid, stop_sequence: isNaN(seq) ? r : seq });
+                // Populate trip sequences from hardcoded data
+                for (const trip of tripsData) {
+                    stopTimesByTrip[trip.trip_id] = [];
+                    for (let i = 0; i < trip.stops.length; i++) {
+                        stopTimesByTrip[trip.trip_id].push({
+                            stop_id: trip.stops[i],
+                            stop_sequence: i + 1
+                        });
                     }
                 }
 
-                console.log(`Parsed ${Object.keys(stopTimesByTrip).length} trips`);
+                console.log(`Loaded ${stopsList.length} stops`);
+                console.log(`Loaded ${Object.keys(stopTimesByTrip).length} trips`);
 
                 populateSelects();
                 status(`loaded ${stopsList.length} stops, ${Object.keys(stopTimesByTrip).length} trips`);
