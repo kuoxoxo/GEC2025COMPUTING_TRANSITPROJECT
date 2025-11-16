@@ -49,6 +49,18 @@
         </section>
 
         <section class="project" style="margin-top:18px;">
+            <h2>Route Analysis (GEC2025 Functions)</h2>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+                <button id="analyzeBtn">Analyze Loaded Routes</button>
+                <button id="findStopsBtn">Find Stops in Trip</button>
+                <button id="calcDistanceBtn">Calculate Distance</button>
+            </div>
+            <div id="analysisInfo"
+                style="background:#f8f8f8;padding:10px;border-radius:6px;border-left:4px solid #35424a;min-height:40px;white-space:pre-wrap;font-size:0.9rem;">
+            </div>
+        </section>
+
+        <section class="project" style="margin-top:18px;">
             <h2>C source: gec2025.c</h2>
             <p>
                 The repository contains gec2025.c at the project root. You can download it
@@ -70,11 +82,12 @@
     </main>
 
     <script>
-        /* Integrated JS: loads GTFS CSVs, finds a trip that contains both stops,
-           extracts intermediate stops in-sequence and draws them on a Leaflet map.
-           Also fetches and displays the gec2025.c source file (served from parent dir). */
+        /* ============================================================================
+           GEC2025 GTFS Transit Route Viewer
+           Integrates C-like functionality: stop search, route analysis, distance calc
+           ============================================================================ */
 
-        /* --- Helpers --- */
+        /* --- CSV Parsing --- */
         function parseCSV(text) {
             const rows = [];
             let i = 0, cur = [], field = '', inQuotes = false;
@@ -111,11 +124,12 @@
 
         let drawn = { poly: null, markers: [] };
 
-        /* --- Data containers --- */
+        /* --- Data structures (mimic C structs) --- */
         const stops = {};       // stop_id -> {stop_id, stop_name, lat, lon}
-        const stopsList = [];   // array of stop objects (for select)
+        const stopsList = [];   // array of stop objects
         const stopTimesByTrip = {}; // trip_id -> [{stop_id, stop_sequence}, ...]
-        const trips = {};       // trip_id -> {trip_id, route_id, ...}
+        const trips = {};       // trip_id -> {trip_id, route_id, direction_id}
+        const routes_data = {}; // route_id -> {route_id, route_name, ...}
 
         /* --- UI refs --- */
         const startSelect = document.getElementById('startSelect');
@@ -126,36 +140,87 @@
         const getRouteBtn = document.getElementById('getRouteBtn');
         const clearRouteBtn = document.getElementById('clearRouteBtn');
         const directionInfo = document.getElementById('directionInfo');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const findStopsBtn = document.getElementById('findStopsBtn');
+        const calcDistanceBtn = document.getElementById('calcDistanceBtn');
+        const analysisInfo = document.getElementById('analysisInfo');
 
-        /* Populate dropdowns from stopsList */
-        function populateStopSelects() {
-            startSelect.innerHTML = ''; endSelect.innerHTML = '';
-            const optClick = document.createElement('option');
-            optClick.value = ''; optClick.textContent = '-- choose or leave blank to use text input --';
-            startSelect.appendChild(optClick.cloneNode(true));
-            endSelect.appendChild(optClick.cloneNode(true));
-            for (const s of stopsList) {
-                const label = `${s.stop_name} (${s.stop_id})`;
-                const o1 = document.createElement('option'); o1.value = s.stop_id; o1.textContent = label;
-                const o2 = o1.cloneNode(true);
-                startSelect.appendChild(o1); endSelect.appendChild(o2);
-            }
-        }
+        /* ============================================================================
+           GEC2025-STYLE FUNCTIONS (C logic ported to JS)
+           ============================================================================ */
 
-        /* Find stop by id exact or by substring name (case-insensitive) */
-        function findStop(query) {
-            if (!query) return null;
+        /**
+         * find_stop_in_csv - Search for a stop by ID or name (case-insensitive)
+         * Mimics C: int find_stop_in_csv(const char* query)
+         */
+        function find_stop_in_csv(query) {
+            if (!query) return -1;
             query = query.trim();
-            if (stops[query]) return stops[query];
+            // exact ID match first
+            if (stops[query]) return 1; // found by ID
+            // substring name match
             const q = query.toLowerCase();
-            for (const s of stopsList) {
-                if (s.stop_name && s.stop_name.toLowerCase().includes(q)) return s;
+            for (const id in stops) {
+                if (stops[id].stop_name && stops[id].stop_name.toLowerCase().includes(q)) {
+                    return 1; // found by name
+                }
             }
-            return null;
+            return 0; // not found
         }
 
-        /* Find a trip that contains both originId and finalId and return sub-sequence of stop_ids in order */
-        function findTripSequence(originId, finalId) {
+        /**
+         * find_stops_in_trip - Get all stops in a trip sequence
+         * Mimics C: void find_stops_in_trip(trip_id)
+         */
+        function find_stops_in_trip(tripId) {
+            if (!stopTimesByTrip[tripId]) return [];
+            const seq = stopTimesByTrip[tripId].slice().sort((a, b) => a.stop_sequence - b.stop_sequence);
+            const out = [];
+            for (const st of seq) {
+                const s = stops[st.stop_id];
+                if (s) out.push({ ...s, stop_sequence: st.stop_sequence });
+            }
+            return out;
+        }
+
+        /**
+         * calculate_distance - Haversine distance between two lat/lon points (in km)
+         * Mimics C haversine calculation
+         */
+        function calculate_distance(lat1, lon1, lat2, lon2) {
+            const R = 6371; // Earth radius in km
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return R * c;
+        }
+
+        /**
+         * analyze_route - Compute stats for a trip: total distance, stops, etc.
+         */
+        function analyze_route(tripId) {
+            const seq = find_stops_in_trip(tripId);
+            if (seq.length < 2) return null;
+            let totalDist = 0;
+            for (let i = 0; i < seq.length - 1; i++) {
+                const d = calculate_distance(seq[i].lat, seq[i].lon, seq[i + 1].lat, seq[i + 1].lon);
+                totalDist += d;
+            }
+            return {
+                trip_id: tripId,
+                num_stops: seq.length,
+                total_distance_km: totalDist.toFixed(2),
+                stops: seq
+            };
+        }
+
+        /**
+         * get_route_segment - Find shortest trip connecting two stops
+         */
+        function get_route_segment(originId, finalId) {
             for (const tripId in stopTimesByTrip) {
                 const seq = stopTimesByTrip[tripId].slice().sort((a, b) => a.stop_sequence - b.stop_sequence);
                 let idxO = -1, idxF = -1;
@@ -176,6 +241,33 @@
             return null;
         }
 
+        /* Populate dropdowns from stopsList */
+        function populateStopSelects() {
+            startSelect.innerHTML = ''; endSelect.innerHTML = '';
+            const optClick = document.createElement('option');
+            optClick.value = ''; optClick.textContent = '-- choose or leave blank to use text input --';
+            startSelect.appendChild(optClick.cloneNode(true));
+            endSelect.appendChild(optClick.cloneNode(true));
+            for (const s of stopsList) {
+                const label = `${s.stop_name} (${s.stop_id})`;
+                const o1 = document.createElement('option'); o1.value = s.stop_id; o1.textContent = label;
+                const o2 = o1.cloneNode(true);
+                startSelect.appendChild(o1); endSelect.appendChild(o2);
+            }
+        }
+
+        /* Find stop by id or name */
+        function findStop(query) {
+            if (!query) return null;
+            query = query.trim();
+            if (stops[query]) return stops[query];
+            const q = query.toLowerCase();
+            for (const s of stopsList) {
+                if (s.stop_name && s.stop_name.toLowerCase().includes(q)) return s;
+            }
+            return null;
+        }
+
         /* Clear previously drawn route */
         function clearDrawn() {
             if (drawn.poly) { map.removeLayer(drawn.poly); drawn.poly = null; }
@@ -183,7 +275,7 @@
             directionInfo.innerHTML = '';
         }
 
-        /* Draw sequence of stops: markers + polyline */
+        /* Draw sequence of stops */
         function drawStopsSequence(seq) {
             clearDrawn();
             const latlngs = seq.map(s => [s.lat, s.lon]);
@@ -197,7 +289,7 @@
             directionInfo.innerHTML = `Stops in route: ${seq.length}.`;
         }
 
-        /* Attempt to compute route from selected inputs */
+        /* Compute route */
         function computeRoute() {
             const originId = startSelect.value || null;
             const endId = endSelect.value || null;
@@ -210,21 +302,21 @@
             if (!final) final = findStop(endText.value);
 
             if (!origin || !final) {
-                alert('Could not resolve both origin and final stops. Make sure CSVs loaded and inputs are correct.');
+                alert('Could not resolve both origin and final stops.');
                 return;
             }
             if (origin.stop_id === final.stop_id) { alert('Origin and final are the same stop.'); return; }
 
-            const seq = findTripSequence(origin.stop_id, final.stop_id);
+            const seq = get_route_segment(origin.stop_id, final.stop_id);
             if (!seq) {
-                alert('No trip found that contains both stops in order. Showing direct connection instead.');
+                alert('No trip found. Showing direct connection.');
                 drawStopsSequence([origin, final]);
                 return;
             }
             drawStopsSequence(seq);
         }
 
-        /* Load CSVs and build data structures */
+        /* Load CSVs */
         async function loadGTFS() {
             clearDrawn();
             directionInfo.innerHTML = 'Loading CSVs...';
@@ -270,7 +362,7 @@
                 }
 
                 populateStopSelects();
-                directionInfo.innerHTML = `Loaded stops: ${stopsList.length}, trips (stop_times groups): ${Object.keys(stopTimesByTrip).length}`;
+                directionInfo.innerHTML = `Loaded stops: ${stopsList.length}, trips: ${Object.keys(stopTimesByTrip).length}`;
             } catch (err) {
                 console.error(err);
                 alert('CSV load failed: ' + err.message);
@@ -278,39 +370,12 @@
             }
         }
 
-        /* --- UI wiring --- */
-        loadCsvBtn.addEventListener('click', () => loadGTFS());
-        getRouteBtn.addEventListener('click', () => computeRoute());
-        clearRouteBtn.addEventListener('click', () => clearDrawn());
-
-        /* initial load on open */
-        loadGTFS();
-
-        /* --- Fetch and display gec2025.c source (served from parent directory) --- */
-        const cpre = document.getElementById('csource');
-        const reloadCBtn = document.getElementById('reloadCBtn');
-        const toggleCBtn = document.getElementById('toggleCBtn');
-
-        async function loadCSource() {
-            cpre.textContent = 'Loading...';
-            try {
-                const res = await fetch('../gec2025.c');
-                if (!res.ok) throw new Error('Fetch failed: ' + res.status);
-                const txt = await res.text();
-                cpre.textContent = txt;
-            } catch (err) {
-                cpre.textContent = 'Failed to load gec2025.c: ' + err.message + '\n\nEnsure the server serves the project root (parent of docs/) so ../gec2025.c is accessible.';
-            }
-        }
-
-        reloadCBtn.addEventListener('click', loadCSource);
-        toggleCBtn.addEventListener('click', () => {
-            const d = document.getElementById('cDetails');
-            d.open = !d.open;
-        });
-        loadCSource();
-
-    </script>
-</body>
-
-</html>
+        /* --- Analysis functions (GEC2025 features) --- */
+        analyzeBtn.addEventListener('click', () => {
+            const tripIds = Object.keys(stopTimesByTrip);
+            if (tripIds.length === 0) { analysisInfo.textContent = 'No trips loaded.'; return; }
+            let out = 'Route Analysis:\n\n';
+            let totalDist = 0, totalStops = 0;
+            for (let i = 0; i < Math.min(tripIds.length, 5); i++) {
+                const analysis = analyze_route(tripIds[i]);
+                if
