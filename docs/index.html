@@ -56,11 +56,18 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', function () {
-            const map = L.map('map').setView([51.5074, -0.1278], 13);
+            // Center map on University of Guelph (main campus)
+            // Coordinates: approx 43.5322 N, -80.2230 W, zoom 15
+            const map = L.map('map').setView([43.5322, -80.2230], 15);
+
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '&copy; OpenStreetMap contributors',
                 maxZoom: 19
             }).addTo(map);
+
+            // add a marker at the campus center
+            const campusMarker = L.marker([43.5322, -80.2230]).addTo(map)
+                .bindPopup('University of Guelph (approx)').openPopup();
 
             // storage for route objects: { name: { polyline, color } }
             const routes = {};
@@ -165,9 +172,20 @@
                 alert('GeoJSON printed to console.');
             }
 
-            // basic sample routes
-            addRoute('Route A', [[51.5074, -0.1278], [51.5100, -0.1200], [51.515, -0.115]], '#ff0000');
-            addRoute('Route B', [[51.5074, -0.1278], [51.500, -0.130], [51.495, -0.135]], '#0000ff');
+            // sample routes around University of Guelph campus
+            addRoute('Campus Loop A', [
+                [43.5330, -80.2240],
+                [43.5325, -80.2225],
+                [43.5315, -80.2235],
+                [43.5322, -80.2250]
+            ], '#ff0000');
+
+            addRoute('Campus Loop B', [
+                [43.5328, -80.2260],
+                [43.5318, -80.2250],
+                [43.5308, -80.2245],
+                [43.5315, -80.2230]
+            ], '#0000ff');
 
             // wire controls
             document.getElementById('newRouteBtn').addEventListener('click', function () {
