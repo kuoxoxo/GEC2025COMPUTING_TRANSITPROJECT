@@ -177,7 +177,7 @@
 
         async function loadGTFS() {
             try {
-                status('fetching CSVs from ./csv_files/...');
+                status('fetching CSVs from ../csv_files/...');
                 const stopsRows = await fetchCSV('../csv_files/stops.csv');
                 const stopTimesRows = await fetchCSV('../csv_files/stop_times.csv');
 
