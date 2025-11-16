@@ -331,42 +331,77 @@
                 stopsList.length = 0;
                 for (const k in stops) delete stops[k];
                 if (!stopsRows || stopsRows.length < 2) throw new Error('stops.csv missing or empty');
-                const hdrStops = stopsRows[0].map(h => h.trim());
-                const i_id = hdrStops.indexOf('stop_id'), i_name = hdrStops.indexOf('stop_name'), i_lat = hdrStops.indexOf('stop_lat'), i_lon = hdrStops.indexOf('stop_lon');
+
+                // Parse header row and find column indices
+                const hdrStops = stopsRows[0].map(h => h.trim().toLowerCase());
+                let i_id = hdrStops.indexOf('stop_id');
+                let i_name = hdrStops.indexOf('stop_name');
+                let i_lat = hdrStops.indexOf('stop_lat');
+                let i_lon = hdrStops.indexOf('stop_lon');
+
+                // Fallback: check alternate column names
+                if (i_lat === -1) i_lat = hdrStops.indexOf('lat');
+                if (i_lon === -1) i_lon = hdrStops.indexOf('lon');
+                if (i_name === -1) i_name = hdrStops.indexOf('name');
+
+                console.log('Column indices:', { i_id, i_name, i_lat, i_lon });
+                console.log('Header row:', stopsRows[0]);
+
+                // Parse stops rows
                 for (let i = 1; i < stopsRows.length; i++) {
                     const r = stopsRows[i];
-                    if (!r) continue;
+                    if (!r || r.length === 0) continue;
+
                     const id = (i_id >= 0 && i_id < r.length) ? r[i_id].trim() : null;
                     const name = (i_name >= 0 && i_name < r.length) ? r[i_name].trim() : id;
-                    const lat = (i_lat >= 0 && i_lat < r.length) ? parseFloat(r[i_lat]) : NaN;
-                    const lon = (i_lon >= 0 && i_lon < r.length) ? parseFloat(r[i_lon]) : NaN;
-                    if (!id || isNaN(lat) || isNaN(lon)) continue;
+                    const lat = (i_lat >= 0 && i_lat < r.length) ? parseFloat(r[i_lat].trim()) : NaN;
+                    const lon = (i_lon >= 0 && i_lon < r.length) ? parseFloat(r[i_lon].trim()) : NaN;
+
+                    console.log(`Row ${i}:`, { id, name, lat, lon, rawRow: r });
+
+                    if (!id || isNaN(lat) || isNaN(lon)) {
+                        console.warn(`Skipping row ${i}: missing id or coords`);
+                        continue;
+                    }
+
                     const obj = { stop_id: id, stop_name: name, lat: lat, lon: lon };
-                    stops[id] = obj; stopsList.push(obj);
+                    stops[id] = obj;
+                    stopsList.push(obj);
                 }
 
+                // Parse stop_times
                 for (const k in stopTimesByTrip) delete stopTimesByTrip[k];
                 if (stopTimesRows && stopTimesRows.length >= 2) {
-                    const hdr = stopTimesRows[0].map(h => h.trim());
-                    const i_trip = hdr.indexOf('trip_id'), i_stop = hdr.indexOf('stop_id'), i_seq = hdr.indexOf('stop_sequence');
+                    const hdr = stopTimesRows[0].map(h => h.trim().toLowerCase());
+                    const i_trip = hdr.indexOf('trip_id');
+                    const i_stop = hdr.indexOf('stop_id');
+                    let i_seq = hdr.indexOf('stop_sequence');
+                    if (i_seq === -1) i_seq = hdr.indexOf('sequence');
+
+                    console.log('Stop times header indices:', { i_trip, i_stop, i_seq });
+
                     for (let i = 1; i < stopTimesRows.length; i++) {
                         const r = stopTimesRows[i];
-                        if (!r) continue;
+                        if (!r || r.length === 0) continue;
+
                         const tid = (i_trip >= 0 && i_trip < r.length) ? r[i_trip].trim() : null;
                         const sid = (i_stop >= 0 && i_stop < r.length) ? r[i_stop].trim() : null;
-                        const seq = (i_seq >= 0 && i_seq < r.length) ? parseInt(r[i_seq], 10) : i;
+                        const seq = (i_seq >= 0 && i_seq < r.length) ? parseInt(r[i_seq].trim(), 10) : i;
+
                         if (!tid || !sid) continue;
+
                         stopTimesByTrip[tid] = stopTimesByTrip[tid] || [];
                         stopTimesByTrip[tid].push({ stop_id: sid, stop_sequence: seq });
                     }
                 }
 
                 populateStopSelects();
+                console.log('Loaded data:', { stopsCount: stopsList.length, tripsCount: Object.keys(stopTimesByTrip).length });
                 directionInfo.innerHTML = `Loaded stops: ${stopsList.length}, trips: ${Object.keys(stopTimesByTrip).length}`;
             } catch (err) {
-                console.error(err);
+                console.error('CSV load error:', err);
                 alert('CSV load failed: ' + err.message);
-                directionInfo.innerHTML = 'CSV load failed';
+                directionInfo.innerHTML = 'CSV load failed: ' + err.message;
             }
         }
 
