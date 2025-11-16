@@ -269,11 +269,13 @@ void str_to_lower_copy(const char* src, char* dest, size_t destSize) {
  * Parameters:
  *   stopsPath - Path to the stops.csv file
  *   query     - The stop_id or name to search for
+ *   out_stop  - Pointer to Stop struct to store matching stop data (can be
+ * NULL)
  *
  * Returns:
  *   1 if stop found and displayed, 0 if no match or file error
  */
-int find_stop_in_csv(const char* stopsPath, const char* query) {
+int find_stop_in_csv(const char* stopsPath, const char* query, Stop* out_stop) {
   FILE* fp = fopen(stopsPath, "r");
   char resolved[1200];
 
@@ -325,10 +327,13 @@ int find_stop_in_csv(const char* stopsPath, const char* query) {
   // stop_lon
   int idx_id = -1, idx_name = -1, idx_lat = -1, idx_lon = -1;
   {
-    char* hdr = strdup(line);
+    char hdr[4096];
+    strcpy(hdr, line);
     char* tok = strtok(hdr, ",");
     int idx = 0;
     while (tok) {
+      // Remove newlines from token
+      tok[strcspn(tok, "\r\n")] = 0;
       // Identify each column by header name
       if (strcmp(tok, "stop_id") == 0) idx_id = idx;
       if (strcmp(tok, "stop_name") == 0) idx_name = idx;
@@ -337,8 +342,11 @@ int find_stop_in_csv(const char* stopsPath, const char* query) {
       tok = strtok(NULL, ",");
       idx++;
     }
-    free(hdr);
   }
+
+  // Debug: print found indices
+  printf("DEBUG: idx_id=%d, idx_name=%d, idx_lat=%d, idx_lon=%d\n", idx_id,
+         idx_name, idx_lat, idx_lon);
 
   // Convert query to lowercase for case-insensitive name matching
   char qlower[512];
@@ -351,10 +359,11 @@ int find_stop_in_csv(const char* stopsPath, const char* query) {
     line[strcspn(line, "\r\n")] = 0;
 
     // Parse CSV fields (naive split - does not handle quoted commas)
+    char lineCopy[4096];
+    strcpy(lineCopy, line);
     char* fields[128];
     int fc = 0;
-    char* p = line;
-    char* t = strtok(p, ",");
+    char* t = strtok(lineCopy, ",");
     while (t && fc < 128) {
       fields[fc++] = t;
       t = strtok(NULL, ",");
@@ -368,6 +377,28 @@ int find_stop_in_csv(const char* stopsPath, const char* query) {
           printf(" name=%s", fields[idx_name]);
         printf("\n");
         found = 1;
+
+        // If out_stop provided, populate it with stop data
+        if (out_stop) {
+          out_stop->stop_id = malloc(strlen(fields[idx_id]) + 1);
+          strcpy(out_stop->stop_id, fields[idx_id]);
+
+          if (idx_name >= 0 && idx_name < fc) {
+            out_stop->stop_name = malloc(strlen(fields[idx_name]) + 1);
+            strcpy(out_stop->stop_name, fields[idx_name]);
+          }
+
+          if (idx_lat >= 0 && idx_lat < fc) {
+            out_stop->stop_lat = atof(fields[idx_lat]);
+            printf("DEBUG: lat field='%s' value=%.6f\n", fields[idx_lat],
+                   out_stop->stop_lat);
+          }
+          if (idx_lon >= 0 && idx_lon < fc) {
+            out_stop->stop_lon = atof(fields[idx_lon]);
+            printf("DEBUG: lon field='%s' value=%.6f\n", fields[idx_lon],
+                   out_stop->stop_lon);
+          }
+        }
         break;
       }
     }
@@ -376,12 +407,27 @@ int find_stop_in_csv(const char* stopsPath, const char* query) {
     if (idx_name >= 0 && idx_name < fc) {
       char nameLower[512];
       str_to_lower_copy(fields[idx_name], nameLower, sizeof(nameLower));
-      //if (strstr(nameLower, qlower) != NULL) {
-      if (nameLower == qlower) {
+      if (strstr(nameLower, qlower) != NULL) {
         printf("Found stop: id=%s name=%s\n",
                (idx_id >= 0 && idx_id < fc) ? fields[idx_id] : "",
                fields[idx_name]);
         found = 1;
+
+        // If out_stop provided, populate it with stop data
+        if (out_stop) {
+          if (idx_id >= 0 && idx_id < fc) {
+            out_stop->stop_id = malloc(strlen(fields[idx_id]) + 1);
+            strcpy(out_stop->stop_id, fields[idx_id]);
+          }
+
+          out_stop->stop_name = malloc(strlen(fields[idx_name]) + 1);
+          strcpy(out_stop->stop_name, fields[idx_name]);
+
+          if (idx_lat >= 0 && idx_lat < fc)
+            out_stop->stop_lat = atof(fields[idx_lat]);
+          if (idx_lon >= 0 && idx_lon < fc)
+            out_stop->stop_lon = atof(fields[idx_lon]);
+        }
         break;
       }
     }
@@ -390,6 +436,104 @@ int find_stop_in_csv(const char* stopsPath, const char* query) {
   fclose(fp);
   if (!found) printf("No matching stop found for '%s'.\n", query);
   return found;
+}
+
+/**
+ * generate_map_html()
+ *
+ * Generates an HTML map file with Leaflet.js that displays the two stops
+ * and a line connecting them.
+ *
+ * Parameters:
+ *   origin_stop  - Pointer to the origin Stop struct
+ *   final_stop   - Pointer to the final Stop struct
+ *   output_path  - Path where to write the HTML file
+ */
+void generate_map_html(Stop* origin_stop, Stop* final_stop,
+                       const char* output_path) {
+  FILE* fp = fopen(output_path, "w");
+  if (!fp) {
+    fprintf(stderr, "Failed to create map file: %s\n", output_path);
+    return;
+  }
+
+  // Calculate center point between the two stops
+  double center_lat = (origin_stop->stop_lat + final_stop->stop_lat) / 2.0;
+  double center_lon = (origin_stop->stop_lon + final_stop->stop_lon) / 2.0;
+
+  // Write HTML header and map setup
+  fprintf(fp,
+          "<!DOCTYPE html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n<meta "
+          "name=\"viewport\" content=\"width=device-width, "
+          "initial-scale=1.0\">\n");
+  fprintf(fp,
+          "<link rel=\"stylesheet\" "
+          "href=\"https://unpkg.com/leaflet@1.9.4/dist/leaflet.css\" />\n");
+  fprintf(fp, "<style>\n");
+  fprintf(fp, "  html, body, #map { height: 100%%; margin: 0; padding: 0; }\n");
+  fprintf(fp,
+          "  .info { padding: 10px; background: white; border-radius: "
+          "5px; box-shadow: 0 0 15px rgba(0,0,0,0.2); }\n");
+  fprintf(fp, "</style>\n</head>\n<body>\n");
+  fprintf(fp, "<div id=\"map\"></div>\n");
+
+  // Write JavaScript to create map and display stops
+  fprintf(fp,
+          "<script "
+          "src=\"https://unpkg.com/leaflet@1.9.4/dist/leaflet.js\"></"
+          "script>\n");
+  fprintf(fp, "<script>\n");
+  fprintf(fp, "  var map = L.map('map').setView([%.6f, %.6f], 13);\n",
+          center_lat, center_lon);
+  fprintf(fp,
+          "  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', "
+          "{ maxZoom: 19 }).addTo(map);\n");
+
+  // Add origin marker (green)
+  fprintf(fp, "  var originMarker = L.marker([%.6f, %.6f]).addTo(map)\n",
+          origin_stop->stop_lat, origin_stop->stop_lon);
+  fprintf(fp,
+          "    .bindPopup('<b>Origin: %s</b><br/>ID: %s<br/>Lat: %.6f, Lon: "
+          "%.6f');\n",
+          origin_stop->stop_name ? origin_stop->stop_name : "Unknown",
+          origin_stop->stop_id ? origin_stop->stop_id : "",
+          origin_stop->stop_lat, origin_stop->stop_lon);
+  fprintf(fp,
+          "  originMarker.setIcon(L.icon({iconUrl: "
+          "'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/"
+          "master/img/marker-green.png', iconSize: [25, 41], iconAnchor: "
+          "[12, 41], popupAnchor: [1, -34]}));\n");
+
+  // Add final marker (red)
+  fprintf(fp, "  var finalMarker = L.marker([%.6f, %.6f]).addTo(map)\n",
+          final_stop->stop_lat, final_stop->stop_lon);
+  fprintf(fp,
+          "    .bindPopup('<b>Final: %s</b><br/>ID: %s<br/>Lat: %.6f, Lon: "
+          "%.6f');\n",
+          final_stop->stop_name ? final_stop->stop_name : "Unknown",
+          final_stop->stop_id ? final_stop->stop_id : "", final_stop->stop_lat,
+          final_stop->stop_lon);
+  fprintf(fp,
+          "  finalMarker.setIcon(L.icon({iconUrl: "
+          "'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/"
+          "master/img/marker-red.png', iconSize: [25, 41], iconAnchor: [12, "
+          "41], popupAnchor: [1, -34]}));\n");
+
+  // Draw line connecting the two stops
+  fprintf(fp, "  var latlngs = [\n");
+  fprintf(fp, "    [%.6f, %.6f],\n", origin_stop->stop_lat,
+          origin_stop->stop_lon);
+  fprintf(fp, "    [%.6f, %.6f]\n", final_stop->stop_lat, final_stop->stop_lon);
+  fprintf(fp, "  ];\n");
+  fprintf(fp,
+          "  var polyline = L.polyline(latlngs, {color: 'blue', weight: 3, "
+          "opacity: 0.7}).addTo(map);\n");
+  fprintf(fp, "  map.fitBounds(polyline.getBounds());\n");
+  fprintf(fp, "</script>\n");
+  fprintf(fp, "</body>\n</html>\n");
+
+  fclose(fp);
+  printf("Map generated: %s\n", output_path);
 }
 
 // ============================================================================
@@ -406,6 +550,7 @@ int find_stop_in_csv(const char* stopsPath, const char* query) {
  * 2. Prompt user for final/destination stop (by name or ID)
  * 3. Search and display the origin stop details
  * 4. Search and display the final stop details
+ * 5. Generate an interactive HTML map showing both stops
  *
  * Returns:
  *   0 on successful completion, error code on failure
@@ -416,6 +561,10 @@ int main() {
                             "./csv_files/stops.csv",
                             "./csv_files/stop_times.csv",
                             "./csv_files/trips.csv"};
+
+  // Structures to store stop data
+  Stop origin_stop = {NULL, NULL, NULL, 0.0, 0.0};
+  Stop final_stop = {NULL, NULL, NULL, 0.0, 0.0};
 
   // Buffers to store user input for origin and final stops
   char origin_input[256];
@@ -440,13 +589,47 @@ int main() {
   // Path to the stops CSV file
   const char* stopsPath = "./csv_files/stops.csv";
 
-  // Search for and display origin stop
+  // Search for and display origin stop, storing data in origin_stop struct
   printf("\nOrigin Stop:\n");
-  find_stop_in_csv(stopsPath, origin_input);
+  if (!find_stop_in_csv(stopsPath, origin_input, &origin_stop)) {
+    printf("Could not find origin stop. Exiting.\n");
+    return 1;
+  }
 
-  // Search for and display final stop
+  // Search for and display final stop, storing data in final_stop struct
   printf("\nFinal Stop:\n");
-  find_stop_in_csv(stopsPath, final_input);
+  if (!find_stop_in_csv(stopsPath, final_input, &final_stop)) {
+    printf("Could not find final stop. Exiting.\n");
+    return 1;
+  }
+
+  // Generate map HTML file with both stops
+  char mapPath[1200];
+  char csvDir[1024];
+
+  // Find the csv_files directory
+  if (find_file_in_ancestors("./csv_files/stops.csv", csvDir, sizeof(csvDir),
+                             6)) {
+    // Extract just the directory path (remove the filename)
+    char* lastSlash = strrchr(csvDir, '\\');
+    if (lastSlash) {
+      *lastSlash = '\0';
+    }
+    snprintf(mapPath, sizeof(mapPath), "%s\\route_map.html", csvDir);
+  } else {
+    // Fallback to current directory
+    snprintf(mapPath, sizeof(mapPath), "route_map.html");
+  }
+
+  printf("\nGenerating map...\n");
+  generate_map_html(&origin_stop, &final_stop, mapPath);
+  printf("Map generated successfully!\n");
+  printf("Open the following file in your browser:\n%s\n", mapPath);
+  printf("\nOr use: Start-Process \"%s\"\n", mapPath);  // Free allocated memory
+  if (origin_stop.stop_id) free(origin_stop.stop_id);
+  if (origin_stop.stop_name) free(origin_stop.stop_name);
+  if (final_stop.stop_id) free(final_stop.stop_id);
+  if (final_stop.stop_name) free(final_stop.stop_name);
 
   return 0;
 }
