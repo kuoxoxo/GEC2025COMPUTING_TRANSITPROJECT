@@ -439,27 +439,217 @@ int find_stop_in_csv(const char* stopsPath, const char* query, Stop* out_stop) {
 }
 
 /**
+ * get_intermediate_stops()
+ *
+ * Retrieves all stops on a route between the origin and final stops.
+ * Reads from stop_times.csv and stops.csv to find all stops in sequence.
+ *
+ * Parameters:
+ *   stop_times_path - Path to stop_times.csv
+ *   stops_path      - Path to stops.csv
+ *   origin_id       - Stop ID of the origin stop
+ *   final_id        - Stop ID of the final stop
+ *   stops_array     - Output array of Stop structs
+ *   max_stops       - Maximum number of stops to return
+ *
+ * Returns:
+ *   Number of stops in the route (including origin and final)
+ */
+int get_intermediate_stops(const char* stop_times_path, const char* stops_path,
+                           const char* origin_id, const char* final_id,
+                           Stop* stops_array, int max_stops) {
+  FILE* fp = fopen(stop_times_path, "r");
+  char resolved[1200];
+
+  // If file not found, try to find it
+  if (!fp) {
+    if (find_file_in_ancestors(stop_times_path, resolved, sizeof(resolved),
+                               6)) {
+      fp = fopen(resolved, "r");
+    }
+    if (!fp) return 0;
+  } else {
+    strcpy(resolved, stop_times_path);
+  }
+
+  char line[4096];
+  int trip_idx = -1, stop_idx = -1, seq_idx = -1;
+  int found_trip = 0;
+  char trip_id[256] = "";
+  StopTime* stop_sequence = (StopTime*)malloc(max_stops * sizeof(StopTime));
+  int seq_count = 0;
+
+  // Read header
+  if (!fgets(line, sizeof(line), fp)) {
+    fclose(fp);
+    free(stop_sequence);
+    return 0;
+  }
+
+  // Parse header
+  char hdr[4096];
+  strcpy(hdr, line);
+  char* tok = strtok(hdr, ",");
+  int idx = 0;
+  while (tok) {
+    tok[strcspn(tok, "\r\n")] = 0;
+    if (strcmp(tok, "trip_id") == 0) trip_idx = idx;
+    if (strcmp(tok, "stop_id") == 0) stop_idx = idx;
+    if (strcmp(tok, "stop_sequence") == 0) seq_idx = idx;
+    tok = strtok(NULL, ",");
+    idx++;
+  }
+
+  // Find a trip that contains both origin and final stops
+  while (fgets(line, sizeof(line), fp)) {
+    line[strcspn(line, "\r\n")] = 0;
+
+    char lineCopy[4096];
+    strcpy(lineCopy, line);
+    char* fields[128];
+    int fc = 0;
+    char* t = strtok(lineCopy, ",");
+    while (t && fc < 128) {
+      fields[fc++] = t;
+      t = strtok(NULL, ",");
+    }
+
+    if (trip_idx >= 0 && trip_idx < fc && stop_idx >= 0 && stop_idx < fc) {
+      // If this is a new trip, check if previous one contained both stops
+      if (strcmp(fields[trip_idx], trip_id) != 0) {
+        if (seq_count > 0) {
+          // Check if both origin and final stops are in this trip
+          int has_origin = 0, has_final = 0;
+          for (int i = 0; i < seq_count; i++) {
+            if (strcmp(stop_sequence[i].stop_id, origin_id) == 0)
+              has_origin = 1;
+            if (strcmp(stop_sequence[i].stop_id, final_id) == 0) has_final = 1;
+          }
+
+          if (has_origin && has_final) {
+            found_trip = 1;
+            break;
+          }
+        }
+        // Reset for new trip
+        strcpy(trip_id, fields[trip_idx]);
+        seq_count = 0;
+      }
+
+      // Add this stop to the sequence
+      if (seq_count < max_stops) {
+        stop_sequence[seq_count].stop_id =
+            (char*)malloc(strlen(fields[stop_idx]) + 1);
+        strcpy(stop_sequence[seq_count].stop_id, fields[stop_idx]);
+        if (seq_idx >= 0 && seq_idx < fc) {
+          stop_sequence[seq_count].stop_sequence = atoi(fields[seq_idx]);
+        }
+        seq_count++;
+      }
+    }
+  }
+
+  fclose(fp);
+
+  // If we found a valid trip, now get the coordinates for each stop
+  if (found_trip && seq_count > 0) {
+    // Sort by stop sequence
+    for (int i = 0; i < seq_count - 1; i++) {
+      for (int j = 0; j < seq_count - i - 1; j++) {
+        if (stop_sequence[j].stop_sequence >
+            stop_sequence[j + 1].stop_sequence) {
+          StopTime temp = stop_sequence[j];
+          stop_sequence[j] = stop_sequence[j + 1];
+          stop_sequence[j + 1] = temp;
+        }
+      }
+    }
+
+    // Find the range from origin to final
+    int start_idx = -1, end_idx = -1;
+    for (int i = 0; i < seq_count; i++) {
+      if (strcmp(stop_sequence[i].stop_id, origin_id) == 0) start_idx = i;
+      if (strcmp(stop_sequence[i].stop_id, final_id) == 0) {
+        end_idx = i;
+        break;
+      }
+    }
+
+    // Get stop details for all stops in the range
+    int stops_count = 0;
+    if (start_idx >= 0 && end_idx >= start_idx) {
+      for (int i = start_idx; i <= end_idx && stops_count < max_stops; i++) {
+        if (find_stop_in_csv(stops_path, stop_sequence[i].stop_id,
+                             &stops_array[stops_count])) {
+          stops_count++;
+        }
+      }
+    }
+
+    // Free the sequence array
+    for (int i = 0; i < seq_count; i++) {
+      if (stop_sequence[i].stop_id) free(stop_sequence[i].stop_id);
+    }
+    free(stop_sequence);
+
+    return stops_count;
+  }
+
+  // Cleanup
+  for (int i = 0; i < seq_count; i++) {
+    if (stop_sequence[i].stop_id) free(stop_sequence[i].stop_id);
+  }
+  free(stop_sequence);
+
+  return 0;
+}
+
+/**
  * generate_map_html()
  *
- * Generates an HTML map file with Leaflet.js that displays the two stops
- * and a line connecting them.
+ * Generates an HTML map file with Leaflet.js that displays stops
+ * and a line connecting them through all intermediate stops.
  *
  * Parameters:
  *   origin_stop  - Pointer to the origin Stop struct
  *   final_stop   - Pointer to the final Stop struct
  *   output_path  - Path where to write the HTML file
+ *   stops_path   - Path to stops.csv for fetching intermediate stops
+ *   stop_times_path - Path to stop_times.csv
  */
 void generate_map_html(Stop* origin_stop, Stop* final_stop,
-                       const char* output_path) {
+                       const char* output_path, const char* stops_path,
+                       const char* stop_times_path) {
   FILE* fp = fopen(output_path, "w");
   if (!fp) {
     fprintf(stderr, "Failed to create map file: %s\n", output_path);
     return;
   }
 
-  // Calculate center point between the two stops
-  double center_lat = (origin_stop->stop_lat + final_stop->stop_lat) / 2.0;
-  double center_lon = (origin_stop->stop_lon + final_stop->stop_lon) / 2.0;
+  // Fetch intermediate stops
+  Stop* intermediate_stops = (Stop*)malloc(100 * sizeof(Stop));
+  memset(intermediate_stops, 0, 100 * sizeof(Stop));
+
+  int stops_count =
+      get_intermediate_stops(stop_times_path, stops_path, origin_stop->stop_id,
+                             final_stop->stop_id, intermediate_stops, 100);
+
+  // If we couldn't find intermediate stops, use just origin and final
+  if (stops_count == 0) {
+    printf("Could not find intermediate stops, using direct connection\n");
+    intermediate_stops[0] = *origin_stop;
+    intermediate_stops[1] = *final_stop;
+    stops_count = 2;
+  }
+
+  // Calculate center point
+  double center_lat = 0.0, center_lon = 0.0;
+  for (int i = 0; i < stops_count; i++) {
+    center_lat += intermediate_stops[i].stop_lat;
+    center_lon += intermediate_stops[i].stop_lon;
+  }
+  center_lat /= stops_count;
+  center_lon /= stops_count;
 
   // Write HTML header and map setup
   fprintf(fp,
@@ -489,50 +679,60 @@ void generate_map_html(Stop* origin_stop, Stop* final_stop,
           "  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', "
           "{ maxZoom: 19 }).addTo(map);\n");
 
-  // Add origin marker (green)
-  fprintf(fp, "  var originMarker = L.marker([%.6f, %.6f]).addTo(map)\n",
-          origin_stop->stop_lat, origin_stop->stop_lon);
-  fprintf(fp,
-          "    .bindPopup('<b>Origin: %s</b><br/>ID: %s<br/>Lat: %.6f, Lon: "
-          "%.6f');\n",
-          origin_stop->stop_name ? origin_stop->stop_name : "Unknown",
-          origin_stop->stop_id ? origin_stop->stop_id : "",
-          origin_stop->stop_lat, origin_stop->stop_lon);
-  fprintf(fp,
-          "  originMarker.setIcon(L.icon({iconUrl: "
-          "'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/"
-          "master/img/marker-green.png', iconSize: [25, 41], iconAnchor: "
-          "[12, 41], popupAnchor: [1, -34]}));\n");
-
-  // Add final marker (red)
-  fprintf(fp, "  var finalMarker = L.marker([%.6f, %.6f]).addTo(map)\n",
-          final_stop->stop_lat, final_stop->stop_lon);
-  fprintf(fp,
-          "    .bindPopup('<b>Final: %s</b><br/>ID: %s<br/>Lat: %.6f, Lon: "
-          "%.6f');\n",
-          final_stop->stop_name ? final_stop->stop_name : "Unknown",
-          final_stop->stop_id ? final_stop->stop_id : "", final_stop->stop_lat,
-          final_stop->stop_lon);
-  fprintf(fp,
-          "  finalMarker.setIcon(L.icon({iconUrl: "
-          "'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/"
-          "master/img/marker-red.png', iconSize: [25, 41], iconAnchor: [12, "
-          "41], popupAnchor: [1, -34]}));\n");
-
-  // Draw line connecting the two stops
+  // Draw polyline through all stops
   fprintf(fp, "  var latlngs = [\n");
-  fprintf(fp, "    [%.6f, %.6f],\n", origin_stop->stop_lat,
-          origin_stop->stop_lon);
-  fprintf(fp, "    [%.6f, %.6f]\n", final_stop->stop_lat, final_stop->stop_lon);
+  for (int i = 0; i < stops_count; i++) {
+    fprintf(fp, "    [%.6f, %.6f]%s\n", intermediate_stops[i].stop_lat,
+            intermediate_stops[i].stop_lon, (i < stops_count - 1) ? "," : "");
+  }
   fprintf(fp, "  ];\n");
   fprintf(fp,
           "  var polyline = L.polyline(latlngs, {color: 'blue', weight: 3, "
           "opacity: 0.7}).addTo(map);\n");
+
+  // Add markers for all stops
+  for (int i = 0; i < stops_count; i++) {
+    const char* marker_color = "blue";
+    if (i == 0)
+      marker_color = "green";  // Origin
+    else if (i == stops_count - 1)
+      marker_color = "red";  // Final
+    else
+      marker_color = "blue";  // Intermediate
+
+    fprintf(fp, "  var marker%d = L.marker([%.6f, %.6f]).addTo(map)\n", i,
+            intermediate_stops[i].stop_lat, intermediate_stops[i].stop_lon);
+    fprintf(fp,
+            "    .bindPopup('<b>%s: %s</b><br/>ID: %s<br/>Lat: %.6f, Lon: "
+            "%.6f');\n",
+            (i == 0)                 ? "Origin"
+            : (i == stops_count - 1) ? "Final"
+                                     : "Stop",
+            intermediate_stops[i].stop_name ? intermediate_stops[i].stop_name
+                                            : "Unknown",
+            intermediate_stops[i].stop_id ? intermediate_stops[i].stop_id : "",
+            intermediate_stops[i].stop_lat, intermediate_stops[i].stop_lon);
+    fprintf(fp,
+            "  marker%d.setIcon(L.icon({iconUrl: "
+            "'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/"
+            "master/img/marker-%s.png', iconSize: [25, 41], iconAnchor: [12, "
+            "41], popupAnchor: [1, -34]}));\n",
+            i, marker_color);
+  }
+
   fprintf(fp, "  map.fitBounds(polyline.getBounds());\n");
   fprintf(fp, "</script>\n");
   fprintf(fp, "</body>\n</html>\n");
 
   fclose(fp);
+
+  // Free intermediate stops
+  for (int i = 0; i < stops_count; i++) {
+    if (intermediate_stops[i].stop_id) free(intermediate_stops[i].stop_id);
+    if (intermediate_stops[i].stop_name) free(intermediate_stops[i].stop_name);
+  }
+  free(intermediate_stops);
+
   printf("Map generated: %s\n", output_path);
 }
 
@@ -622,7 +822,8 @@ int main() {
   }
 
   printf("\nGenerating map...\n");
-  generate_map_html(&origin_stop, &final_stop, mapPath);
+  generate_map_html(&origin_stop, &final_stop, mapPath, stopsPath,
+                    "./csv_files/stop_times.csv");
   printf("Map generated successfully!\n");
   printf("Open the following file in your browser:\n%s\n", mapPath);
   printf("\nOr use: Start-Process \"%s\"\n", mapPath);  // Free allocated memory
