@@ -376,7 +376,8 @@ int find_stop_in_csv(const char* stopsPath, const char* query) {
     if (idx_name >= 0 && idx_name < fc) {
       char nameLower[512];
       str_to_lower_copy(fields[idx_name], nameLower, sizeof(nameLower));
-      if (strstr(nameLower, qlower) != NULL) {
+      //if (strstr(nameLower, qlower) != NULL) {
+      if (nameLower == qlower) {
         printf("Found stop: id=%s name=%s\n",
                (idx_id >= 0 && idx_id < fc) ? fields[idx_id] : "",
                fields[idx_name]);
