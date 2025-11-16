@@ -81,6 +81,19 @@
                     style="white-space:pre-wrap;max-height:520px;overflow:auto;background:#f7f7f7;padding:12px;border-radius:6px;border:1px solid #e1e1e1">Loading...</pre>
             </details>
         </section>
+
+        <div class="project">
+            <h2>Run gec2025.c (server execution)</h2>
+            <label>Origin (name or stop_id)</label>
+            <input id="run_origin" type="text" placeholder="e.g. Macdonald Hall">
+            <label>Final (name or stop_id)</label>
+            <input id="run_final" type="text" placeholder="e.g. University Centre">
+            <div style="margin-top:8px;">
+                <button id="runCBtn">Run C program</button>
+            </div>
+            <pre id="cOutput"
+                style="white-space:pre-wrap; background:#f7f7f7; padding:10px; margin-top:8px; max-height:300px; overflow:auto;">Output will appear here</pre>
+        </div>
     </main>
 
     <script>
@@ -526,6 +539,27 @@
         });
         loadCSource();
 
+        // call /run-gec2025 on server
+        document.getElementById('runCBtn').addEventListener('click', async () => {
+            const origin = document.getElementById('run_origin').value || '';
+            const finalStop = document.getElementById('run_final').value || '';
+            document.getElementById('cOutput').textContent = 'Running...';
+            try {
+                const r = await fetch('/run-gec2025', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ origin, final: finalStop })
+                });
+                const j = await r.json();
+                let out = '';
+                out += `exit code: ${j.code}\n\n`;
+                if (j.stdout) out += 'STDOUT:\n' + j.stdout + '\n';
+                if (j.stderr) out += 'STDERR:\n' + j.stderr + '\n';
+                document.getElementById('cOutput').textContent = out;
+            } catch (err) {
+                document.getElementById('cOutput').textContent = 'Request failed: ' + String(err);
+            }
+        });
     </script>
 </body>
 

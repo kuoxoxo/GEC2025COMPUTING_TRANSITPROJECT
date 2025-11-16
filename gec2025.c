@@ -32,29 +32,36 @@
  * Returns:
  *   1 if file found (path stored in outPath), 0 otherwise
  */
-int find_file_in_ancestors(const char* relPath, char* outPath, size_t outSize,
-                           int max_levels) {
+int find_file_in_ancestors(const char *relPath, char *outPath, size_t outSize,
+                           int max_levels)
+{
   char cwd[1024];
   // Get the current working directory
-  if (_getcwd(cwd, sizeof(cwd)) == NULL) return 0;
+  if (_getcwd(cwd, sizeof(cwd)) == NULL)
+    return 0;
 
   // Skip leading ./ or .\ in the relative path for cleaner concatenation
-  const char* rel = relPath;
-  if ((rel[0] == '.' && (rel[1] == '/' || rel[1] == '\\'))) rel += 2;
+  const char *rel = relPath;
+  if ((rel[0] == '.' && (rel[1] == '/' || rel[1] == '\\')))
+    rel += 2;
 
   // Try each directory level
-  for (int level = 0; level <= max_levels; ++level) {
+  for (int level = 0; level <= max_levels; ++level)
+  {
     char base[1024];
     // Copy current working directory to base
     strncpy(base, cwd, sizeof(base));
     base[sizeof(base) - 1] = '\0';
 
     // Move up 'level' parent directories
-    for (int i = 0; i < level; ++i) {
+    for (int i = 0; i < level; ++i)
+    {
       // Find the last backslash or forward slash in the path
-      char* p = strrchr(base, '\\');
-      if (!p) p = strrchr(base, '/');
-      if (!p) {
+      char *p = strrchr(base, '\\');
+      if (!p)
+        p = strrchr(base, '/');
+      if (!p)
+      {
         base[0] = '\0';
         break;
       }
@@ -70,8 +77,9 @@ int find_file_in_ancestors(const char* relPath, char* outPath, size_t outSize,
       snprintf(candidate, sizeof(candidate), "%s\\%s", base, rel);
 
     // Check if the candidate file exists
-    FILE* f = fopen(candidate, "r");
-    if (f) {
+    FILE *f = fopen(candidate, "r");
+    if (f)
+    {
       fclose(f);
       // File found - store the path and return success
       strncpy(outPath, candidate, outSize);
@@ -98,17 +106,21 @@ int find_file_in_ancestors(const char* relPath, char* outPath, size_t outSize,
  * Returns:
  *   1 on success, 0 on failure
  */
-int get_exe_dir(char* out, size_t outSize) {
+int get_exe_dir(char *out, size_t outSize)
+{
   char path[MAX_PATH];
   // Get the full path to the currently running executable
   DWORD len = GetModuleFileNameA(NULL, path, MAX_PATH);
-  if (len == 0 || len == MAX_PATH) return 0;
+  if (len == 0 || len == MAX_PATH)
+    return 0;
 
   // Find the last backslash or forward slash to separate directory from
   // filename
-  char* p = strrchr(path, '\\');
-  if (!p) p = strrchr(path, '/');
-  if (!p) return 0;
+  char *p = strrchr(path, '\\');
+  if (!p)
+    p = strrchr(path, '/');
+  if (!p)
+    return 0;
 
   // Truncate the path at the last separator to get just the directory
   *p = '\0';
@@ -125,12 +137,13 @@ int get_exe_dir(char* out, size_t outSize) {
  * Stop structure
  * Represents a transit stop from the stops.csv file.
  */
-typedef struct {
-  char* stop_id;    ///< Unique identifier for the stop
-  char* stop_name;  ///< Name of the stop
-  char* stop_desc;  ///< Description of the stop
-  double stop_lat;  ///< Latitude coordinate
-  double stop_lon;  ///< Longitude coordinate
+typedef struct
+{
+  char *stop_id;   ///< Unique identifier for the stop
+  char *stop_name; ///< Name of the stop
+  char *stop_desc; ///< Description of the stop
+  double stop_lat; ///< Latitude coordinate
+  double stop_lon; ///< Longitude coordinate
 } Stop;
 
 /**
@@ -138,12 +151,13 @@ typedef struct {
  * Represents a stop time from the stop_times.csv file.
  * Tracks when a trip stops at a particular stop.
  */
-typedef struct {
-  char* trip_id;         ///< ID of the trip
-  char* arrival_time;    ///< Arrival time at this stop
-  char* departure_time;  ///< Departure time from this stop
-  char* stop_id;         ///< ID of the stop
-  int stop_sequence;     ///< Sequence number of stop in the trip
+typedef struct
+{
+  char *trip_id;        ///< ID of the trip
+  char *arrival_time;   ///< Arrival time at this stop
+  char *departure_time; ///< Departure time from this stop
+  char *stop_id;        ///< ID of the stop
+  int stop_sequence;    ///< Sequence number of stop in the trip
 } StopTime;
 
 /**
@@ -152,12 +166,13 @@ typedef struct {
  * A trip is a sequence of stops that a vehicle travels along on a specific
  * route.
  */
-typedef struct {
-  char* route_id;       ///< ID of the route this trip belongs to
-  char* service_id;     ///< Service ID for schedule patterns
-  char* trip_id;        ///< Unique identifier for the trip
-  char* trip_headsign;  ///< Direction/destination displayed on the vehicle
-  int direction_id;     ///< Direction ID (0 or 1, typically)
+typedef struct
+{
+  char *route_id;      ///< ID of the route this trip belongs to
+  char *service_id;    ///< Service ID for schedule patterns
+  char *trip_id;       ///< Unique identifier for the trip
+  char *trip_headsign; ///< Direction/destination displayed on the vehicle
+  int direction_id;    ///< Direction ID (0 or 1, typically)
 } Trip;
 
 // ============================================================================
@@ -173,9 +188,11 @@ typedef struct {
  * Parameters:
  *   filename - Path to the CSV file to read
  */
-void readCSVFile(const char* filename) {
-  FILE* fp = fopen(filename, "r");
-  if (fp == NULL) {
+void readCSVFile(const char *filename)
+{
+  FILE *fp = fopen(filename, "r");
+  if (fp == NULL)
+  {
     perror("File opening error");
     return;
   }
@@ -183,20 +200,22 @@ void readCSVFile(const char* filename) {
   printf("\n=== Reading %s ===\n", filename);
   char line[1024];
   int lineCount = 0;
-  int maxLines = 10;  // Limit to first 10 lines per file
+  int maxLines = 10; // Limit to first 10 lines per file
 
   // Read and parse lines from the file
-  while (fgets(line, sizeof(line), fp) != NULL && lineCount < maxLines) {
+  while (fgets(line, sizeof(line), fp) != NULL && lineCount < maxLines)
+  {
     // Remove newline character
     line[strcspn(line, "\n")] = 0;
 
-    char* field;
+    char *field;
     char lineCopy[1024];
     strcpy(lineCopy, line);
 
     // Parse comma-separated values
     field = strtok(lineCopy, ",");
-    while (field != NULL) {
+    while (field != NULL)
+    {
       printf("%s | ", field);
       field = strtok(NULL, ",");
     }
@@ -204,7 +223,8 @@ void readCSVFile(const char* filename) {
     lineCount++;
   }
 
-  if (lineCount == maxLines) {
+  if (lineCount == maxLines)
+  {
     printf("... (limiting output to %d lines)\n", maxLines);
   }
 
@@ -224,8 +244,10 @@ void readCSVFile(const char* filename) {
  * Returns:
  *   1 on success, 0 on failure (EOF or read error)
  */
-int read_line(char* buf, size_t size) {
-  if (!fgets(buf, (int)size, stdin)) return 0;
+int read_line(char *buf, size_t size)
+{
+  if (!fgets(buf, (int)size, stdin))
+    return 0;
   // Remove trailing \r and \n characters
   buf[strcspn(buf, "\r\n")] = '\0';
   return 1;
@@ -241,7 +263,8 @@ int read_line(char* buf, size_t size) {
  *   dest      - Destination buffer for lowercase copy
  *   destSize  - Size of destination buffer
  */
-void str_to_lower_copy(const char* src, char* dest, size_t destSize) {
+void str_to_lower_copy(const char *src, char *dest, size_t destSize)
+{
   size_t i;
   // Convert each character to lowercase
   for (i = 0; i + 1 < destSize && src[i] != '\0'; ++i)
@@ -273,31 +296,41 @@ void str_to_lower_copy(const char* src, char* dest, size_t destSize) {
  * Returns:
  *   1 if stop found and displayed, 0 if no match or file error
  */
-int find_stop_in_csv(const char* stopsPath, const char* query) {
-  FILE* fp = fopen(stopsPath, "r");
+int find_stop_in_csv(const char *stopsPath, const char *query)
+{
+  FILE *fp = fopen(stopsPath, "r");
   char resolved[1200];
 
   // If file not found at the provided path, search for it
-  if (!fp) {
+  if (!fp)
+  {
     // Try from current working directory and parent directories
-    if (find_file_in_ancestors(stopsPath, resolved, sizeof(resolved), 6)) {
+    if (find_file_in_ancestors(stopsPath, resolved, sizeof(resolved), 6))
+    {
       printf("found stops file at: %s\n", resolved);
       fp = fopen(resolved, "r");
-      if (!fp) {
+      if (!fp)
+      {
         fprintf(stderr, "opening stops file '%s': %s\n", resolved,
                 strerror(errno));
         return 0;
       }
-    } else {
+    }
+    else
+    {
       // Try from executable directory (useful when debugger runs with different
       // cwd)
       char exeDir[1024];
-      if (get_exe_dir(exeDir, sizeof(exeDir))) {
+      if (get_exe_dir(exeDir, sizeof(exeDir)))
+      {
         char oldcwd[1024];
-        if (_getcwd(oldcwd, sizeof(oldcwd)) != NULL) {
-          if (_chdir(exeDir) == 0) {
+        if (_getcwd(oldcwd, sizeof(oldcwd)) != NULL)
+        {
+          if (_chdir(exeDir) == 0)
+          {
             if (find_file_in_ancestors(stopsPath, resolved, sizeof(resolved),
-                                       6)) {
+                                       6))
+            {
               printf("found stops file at: %s\n", resolved);
               fp = fopen(resolved, "r");
             }
@@ -307,7 +340,8 @@ int find_stop_in_csv(const char* stopsPath, const char* query) {
       }
     }
 
-    if (!fp) {
+    if (!fp)
+    {
       fprintf(stderr, "opening stops file '%s': %s\n", stopsPath,
               strerror(errno));
       return 0;
@@ -316,7 +350,8 @@ int find_stop_in_csv(const char* stopsPath, const char* query) {
 
   // Read the first line (header) to determine column indices
   char line[4096];
-  if (!fgets(line, sizeof(line), fp)) {
+  if (!fgets(line, sizeof(line), fp))
+  {
     fclose(fp);
     return 0;
   }
@@ -325,15 +360,20 @@ int find_stop_in_csv(const char* stopsPath, const char* query) {
   // stop_lon
   int idx_id = -1, idx_name = -1, idx_lat = -1, idx_lon = -1;
   {
-    char* hdr = strdup(line);
-    char* tok = strtok(hdr, ",");
+    char *hdr = strdup(line);
+    char *tok = strtok(hdr, ",");
     int idx = 0;
-    while (tok) {
+    while (tok)
+    {
       // Identify each column by header name
-      if (strcmp(tok, "stop_id") == 0) idx_id = idx;
-      if (strcmp(tok, "stop_name") == 0) idx_name = idx;
-      if (strcmp(tok, "stop_lat") == 0) idx_lat = idx;
-      if (strcmp(tok, "stop_lon") == 0) idx_lon = idx;
+      if (strcmp(tok, "stop_id") == 0)
+        idx_id = idx;
+      if (strcmp(tok, "stop_name") == 0)
+        idx_name = idx;
+      if (strcmp(tok, "stop_lat") == 0)
+        idx_lat = idx;
+      if (strcmp(tok, "stop_lon") == 0)
+        idx_lon = idx;
       tok = strtok(NULL, ",");
       idx++;
     }
@@ -346,23 +386,27 @@ int find_stop_in_csv(const char* stopsPath, const char* query) {
 
   int found = 0;
   // Search through each data row
-  while (fgets(line, sizeof(line), fp)) {
+  while (fgets(line, sizeof(line), fp))
+  {
     // Remove trailing newline
     line[strcspn(line, "\r\n")] = 0;
 
     // Parse CSV fields (naive split - does not handle quoted commas)
-    char* fields[128];
+    char *fields[128];
     int fc = 0;
-    char* p = line;
-    char* t = strtok(p, ",");
-    while (t && fc < 128) {
+    char *p = line;
+    char *t = strtok(p, ",");
+    while (t && fc < 128)
+    {
       fields[fc++] = t;
       t = strtok(NULL, ",");
     }
 
     // Check for exact match on stop_id
-    if (idx_id >= 0 && idx_id < fc) {
-      if (strcmp(fields[idx_id], query) == 0) {
+    if (idx_id >= 0 && idx_id < fc)
+    {
+      if (strcmp(fields[idx_id], query) == 0)
+      {
         printf("Found stop: id=%s", fields[idx_id]);
         if (idx_name >= 0 && idx_name < fc)
           printf(" name=%s", fields[idx_name]);
@@ -373,10 +417,12 @@ int find_stop_in_csv(const char* stopsPath, const char* query) {
     }
 
     // Check for substring match on stop_name (case-insensitive)
-    if (idx_name >= 0 && idx_name < fc) {
+    if (idx_name >= 0 && idx_name < fc)
+    {
       char nameLower[512];
       str_to_lower_copy(fields[idx_name], nameLower, sizeof(nameLower));
-      if (strstr(nameLower, qlower) != NULL) {
+      if (strstr(nameLower, qlower) != NULL)
+      {
         printf("Found stop: id=%s name=%s\n",
                (idx_id >= 0 && idx_id < fc) ? fields[idx_id] : "",
                fields[idx_name]);
@@ -387,7 +433,8 @@ int find_stop_in_csv(const char* stopsPath, const char* query) {
   }
 
   fclose(fp);
-  if (!found) printf("No matching stop found for '%s'.\n", query);
+  if (!found)
+    printf("No matching stop found for '%s'.\n", query);
   return found;
 }
 
@@ -409,9 +456,10 @@ int find_stop_in_csv(const char* stopsPath, const char* query) {
  * Returns:
  *   0 on successful completion, error code on failure
  */
-int main() {
+int main()
+{
   // Array of CSV files used by this program (for reference)
-  const char* csvFiles[] = {"./csv_files/routes.csv", "./csv_files/shapes.csv",
+  const char *csvFiles[] = {"./csv_files/routes.csv", "./csv_files/shapes.csv",
                             "./csv_files/stops.csv",
                             "./csv_files/stop_times.csv",
                             "./csv_files/trips.csv"};
@@ -422,22 +470,26 @@ int main() {
 
   // Prompt for and read origin stop input
   printf("Enter origin stop name or stop_id: ");
-  if (!read_line(origin_input, sizeof(origin_input))) return 0;
-  if (strlen(origin_input) == 0) {
+  if (!read_line(origin_input, sizeof(origin_input)))
+    return 0;
+  if (strlen(origin_input) == 0)
+  {
     printf("No origin provided. Exiting.\n");
     return 0;
   }
 
   // Prompt for and read final stop input
   printf("Enter final stop name or stop_id: ");
-  if (!read_line(final_input, sizeof(final_input))) return 0;
-  if (strlen(final_input) == 0) {
+  if (!read_line(final_input, sizeof(final_input)))
+    return 0;
+  if (strlen(final_input) == 0)
+  {
     printf("No final stop provided. Exiting.\n");
     return 0;
   }
 
   // Path to the stops CSV file
-  const char* stopsPath = "./csv_files/stops.csv";
+  const char *stopsPath = "./csv_files/stops.csv";
 
   // Search for and display origin stop
   printf("\nOrigin Stop:\n");
