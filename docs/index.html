@@ -75,13 +75,13 @@
 
     <div class="controls">
         <div>
-            <strong>CSV files</strong> — upload to override server files (stops.csv & stop_times.csv required)
+            <strong>CSV data</strong> — embedded in the page (no uploads required)
         </div>
+
         <div class="row">
-            <input id="stopsFile" type="file" accept=".csv" />
-            <input id="stopTimesFile" type="file" accept=".csv" />
-            <button id="loadBtn">Load CSVs</button>
-            <button id="fetchBtn" class="secondary">Load from ./csv_files (server)</button>
+            <button id="loadBtn">(Re)Load embedded GTFS</button>
+            <button id="routeBtn">Get Route</button>
+            <button id="clearBtn" class="secondary">Clear Map</button>
         </div>
 
         <div>
@@ -101,8 +101,6 @@
             <input id="startText" type="text" placeholder="e.g. Macdonald Hall or S1" />
             <label for="endText">Or end (name/id)</label>
             <input id="endText" type="text" placeholder="e.g. University Centre or S3" />
-            <button id="routeBtn">Get Route</button>
-            <button id="clearBtn" class="secondary">Clear Map</button>
         </div>
 
         <div>
@@ -113,12 +111,35 @@
     <div id="map"></div>
 
     <script>
-        /* Minimal GTFS route viewer:
-           - Accepts uploaded stops.csv and stop_times.csv (or falls back to ./csv_files/)
-           - Populates start/end selects
-           - Finds a trip that contains both stops in-order and draws that segment on the Leaflet map
+        /* Minimal GTFS route viewer with embedded CSVs:
+           - stopsCsv / stopTimesCsv / tripsCsv are included below
+           - page no longer asks for CSV files from the user
         */
 
+        // --- EMBEDDED CSV DATA (edit as needed) ---
+        const stopsCsv = `stop_id,stop_name,stop_lat,stop_lon
+S1,Macdonald Hall,43.5325,-80.2231
+S2,University Centre,43.5328,-80.2240
+S3,Stone Road Mall,43.5290,-80.2450
+S4,East Parkade,43.5340,-80.2210
+`;
+
+        const stopTimesCsv = `trip_id,arrival_time,departure_time,stop_id,stop_sequence
+TRIP1,08:00:00,08:00:00,S1,1
+TRIP1,08:05:00,08:05:00,S2,2
+TRIP1,08:20:00,08:20:00,S3,3
+TRIP2,09:00:00,09:00:00,S4,1
+TRIP2,09:10:00,09:10:00,S2,2
+TRIP2,09:25:00,09:25:00,S3,3
+`;
+
+        // optional, not strictly required by current logic but included for completeness
+        const tripsCsv = `route_id,service_id,trip_id
+R1,WD,TRIP1
+R2,WD,TRIP2
+`;
+
+        // --- existing app code (adapted to use embedded strings) ---
         const map = L.map('map').setView([43.5322, -80.2230], 15);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
 
@@ -129,12 +150,7 @@
         const stopsList = [];      // array of stops
         const stopTimesByTrip = {}; // trip_id -> [{stop_id, stop_sequence}, ...]
 
-        let stopsFileText = null, stopTimesFileText = null;
-
-        const stopsFile = document.getElementById('stopsFile');
-        const stopTimesFile = document.getElementById('stopTimesFile');
         const loadBtn = document.getElementById('loadBtn');
-        const fetchBtn = document.getElementById('fetchBtn');
         const startSelect = document.getElementById('startSelect');
         const endSelect = document.getElementById('endSelect');
         const startText = document.getElementById('startText');
@@ -143,21 +159,8 @@
         const clearBtn = document.getElementById('clearBtn');
         const statusEl = document.getElementById('status');
 
-        /* file readers */
-        function readLocalFile(file, cb) {
-            if (!file) { cb(null); return; }
-            const fr = new FileReader();
-            fr.onload = () => cb(fr.result);
-            fr.onerror = () => cb(null);
-            fr.readAsText(file, 'utf-8');
-        }
-        stopsFile.addEventListener('change', e => readLocalFile(e.target.files[0], txt => { stopsFileText = txt; status('stops file loaded'); }));
-        stopTimesFile.addEventListener('change', e => readLocalFile(e.target.files[0], txt => { stopTimesFileText = txt; status('stop_times file loaded'); }));
-
-        /* status helper */
         function status(msg) { statusEl.textContent = 'Status: ' + msg; }
 
-        /* robust CSV parser (handles BOM, quoted fields, common delimiters) */
         function parseCSV(text) {
             if (!text) return [];
             if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
@@ -184,27 +187,17 @@
             return cleaned;
         }
 
-        /* fetch helper */
-        async function fetchCSV(path) {
-            const res = await fetch(path);
-            if (!res.ok) throw new Error('HTTP ' + res.status);
-            const txt = await res.text();
-            return parseCSV(txt);
-        }
-
-        /* load GTFS data (uploaded preferred, otherwise from ./csv_files/) */
-        async function loadGTFS() {
+        async function loadGTFSFromEmbedded() {
             try {
-                status('loading CSVs...');
-                const stopsRows = stopsFileText ? parseCSV(stopsFileText) : await fetchCSV('./csv_files/stops.csv');
-                const stopTimesRows = stopTimesFileText ? parseCSV(stopTimesFileText) : await fetchCSV('./csv_files/stop_times.csv');
-
+                status('parsing embedded CSVs...');
+                const stopsRows = parseCSV(stopsCsv);
+                const stopTimesRows = parseCSV(stopTimesCsv);
                 // reset
                 Object.keys(stops).forEach(k => delete stops[k]);
                 stopsList.length = 0;
                 Object.keys(stopTimesByTrip).forEach(k => delete stopTimesByTrip[k]);
 
-                if (!stopsRows || stopsRows.length < 1) throw new Error('stops.csv missing or empty');
+                if (!stopsRows || stopsRows.length < 1) throw new Error('stops.csv missing or empty (embedded)');
 
                 const hdrStops = stopsRows[0].map(h => (h || '').toString().trim().toLowerCase());
                 let i_id = hdrStops.indexOf('stop_id');
@@ -216,7 +209,6 @@
                 if (i_lat === -1) i_lat = hdrStops.indexOf('lat');
                 if (i_lon === -1) i_lon = hdrStops.indexOf('lon');
 
-                // parse stops rows
                 for (let r = 1; r < stopsRows.length; r++) {
                     const row = stopsRows[r];
                     if (!row) continue;
@@ -249,7 +241,7 @@
                 }
 
                 populateSelects();
-                status(`loaded ${stopsList.length} stops, ${Object.keys(stopTimesByTrip).length} trips`);
+                status(`loaded ${stopsList.length} stops, ${Object.keys(stopTimesByTrip).length} trips (embedded)`);
             } catch (err) {
                 console.error(err);
                 status('load error: ' + (err && err.message ? err.message : err));
@@ -257,13 +249,11 @@
             }
         }
 
-        /* populate selects */
         function populateSelects() {
             startSelect.innerHTML = ''; endSelect.innerHTML = '';
             const placeholder = document.createElement('option'); placeholder.value = ''; placeholder.textContent = '-- choose --';
             startSelect.appendChild(placeholder.cloneNode(true));
             endSelect.appendChild(placeholder.cloneNode(true));
-            // sort by name for nicer UX
             stopsList.sort((a, b) => (a.stop_name || '').localeCompare(b.stop_name || ''));
             for (const s of stopsList) {
                 const o1 = document.createElement('option'); o1.value = s.stop_id; o1.textContent = `${s.stop_name} (${s.stop_id})`;
@@ -272,7 +262,6 @@
             }
         }
 
-        /* find stop by id or name substring */
         function findStop(query) {
             if (!query) return null;
             query = String(query).trim();
@@ -282,7 +271,6 @@
             return null;
         }
 
-        /* find trip sequence containing origin->final (in-order) */
         function findTripSequence(originId, finalId) {
             for (const tripId in stopTimesByTrip) {
                 const seq = stopTimesByTrip[tripId].slice().sort((a, b) => a.stop_sequence - b.stop_sequence);
@@ -304,7 +292,6 @@
             return null;
         }
 
-        /* draw sequence */
         function drawSequence(seq) {
             clearMap();
             if (!seq || seq.length === 0) return;
@@ -315,20 +302,17 @@
                 markerLayers.push(m);
             });
             try { map.fitBounds(polyLayer.getBounds(), { padding: [20, 20] }); } catch (e) { }
-            // compute straight-line distance
             let dist = 0;
             for (let i = 0; i < seq.length - 1; i++) dist += haversine(seq[i].lat, seq[i].lon, seq[i + 1].lat, seq[i + 1].lon);
             status(`plotted ${seq.length} stops — distance ≈ ${dist.toFixed(2)} km`);
         }
 
-        /* clear */
         function clearMap() {
             if (polyLayer) { map.removeLayer(polyLayer); polyLayer = null; }
             markerLayers.forEach(m => map.removeLayer(m)); markerLayers = [];
             status('cleared map');
         }
 
-        /* haversine km */
         function haversine(lat1, lon1, lat2, lon2) {
             const R = 6371;
             const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -337,20 +321,17 @@
             return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
         }
 
-        /* main route action */
         function handleRoute() {
-            // prefer selects if chosen
             const sId = startSelect.value || null;
             const eId = endSelect.value || null;
             let origin = sId ? stops[sId] : findStop(startText.value);
             let final = eId ? stops[eId] : findStop(endText.value);
 
-            if (!origin || !final) { alert('Could not resolve both origin and final stops. Load CSVs and try again.'); return; }
+            if (!origin || !final) { alert('Could not resolve both origin and final stops. Load GTFS and try again.'); return; }
             if (origin.stop_id === final.stop_id) { alert('Origin and final are the same stop.'); return; }
 
             const seq = findTripSequence(origin.stop_id, final.stop_id);
             if (!seq) {
-                // fallback: direct line
                 if (!confirm('No trip contains both stops in order. Draw direct connection instead?')) return;
                 drawSequence([origin, final]);
                 return;
@@ -358,14 +339,12 @@
             drawSequence(seq);
         }
 
-        /* UI wiring */
-        loadBtn.addEventListener('click', loadGTFS);
-        fetchBtn.addEventListener('click', () => { stopsFileText = null; stopTimesFileText = null; loadGTFS(); });
+        loadBtn.addEventListener('click', loadGTFSFromEmbedded);
         routeBtn.addEventListener('click', handleRoute);
         clearBtn.addEventListener('click', clearMap);
 
-        /* initial attempt to load server CSVs */
-        loadGTFS();
+        // auto load embedded CSVs on open
+        loadGTFSFromEmbedded();
     </script>
 </body>
 
