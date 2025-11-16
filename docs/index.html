@@ -6,24 +6,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Transit Route Finder</title>
     <link rel="stylesheet" href="style.css" />
-    <!-- Leaflet CSS for map styling -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <!-- Leaflet JS library for interactive maps -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 </head>
 
 <body>
-    <!-- Main content container -->
     <main class="simple-layout">
-        <!-- Map section -->
         <section class="map-section">
-            <!-- Map container - Leaflet will render here -->
             <div id="map" style="width: 100%; height: 500px; border-radius: 8px; overflow: hidden;"></div>
-            <!-- Lat/Lon display overlay (shows current mouse position on map) -->
             <div id="latlon" class="map-coords">Lat: Lon: </div>
         </section>
 
-        <!-- Terminal section -->
         <section class="terminal-section">
             <div class="terminal-header">
                 <h3>GEC2025 C Program Terminal</h3>
@@ -40,21 +33,14 @@
         </section>
     </main>
 
-    <!-- Main JavaScript logic -->
     <script>
-        // Wait for DOM to fully load before running code
         document.addEventListener('DOMContentLoaded', function () {
-            // ============================================
-            // MAP INITIALIZATION
-            // ============================================
-            // Center on University of Guelph
             const map = L.map('map').setView([43.5322, -80.2230], 15);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '&copy; OpenStreetMap contributors',
                 maxZoom: 19
             }).addTo(map);
 
-            // Update lat/lon display on mouse move over map
             const latlonDisplay = document.getElementById('latlon');
             map.on('mousemove', function (e) {
                 const lat = e.latlng.lat.toFixed(4);
@@ -62,63 +48,38 @@
                 latlonDisplay.textContent = `Lat: ${lat}   Lon: ${lon}`;
             });
 
-            // ============================================
-            // TERMINAL FUNCTIONALITY
-            // ============================================
+            // Terminal elements
             const terminal = document.getElementById('terminal');
             const startBtn = document.getElementById('startBtn');
             const restartBtn = document.getElementById('restartBtn');
             const terminalInput = document.getElementById('terminalInput');
             const submitBtn = document.getElementById('submitBtn');
+
+            // State
             let isRunning = false;
             let stopsData = [];
-            let inputState = null; // 'waiting_origin' or 'waiting_final'
+            let tripStops = new Map();
+            let inputState = null;
             let originStop = null;
             let finalStop = null;
+            let currentPolyline = null;
+            let currentMarkersGroup = null;
+            let currentConnectorLines = [];
+            let lastPromptEchoSpan = null;
 
-            // Add text to terminal with scrolling
-            function addTerminalLine(text, isError = false) {
-                const line = document.createElement('div');
-                line.textContent = text;
-                if (isError) line.style.color = '#ff6b6b';
-                terminal.appendChild(line);
-                terminal.scrollTop = terminal.scrollHeight;
-            }
-
-            // Add a prompt that will be echoed on the same line when the user
-            // submits their input, to mimic terminal behavior.
-            let _lastPromptEchoSpan = null;
-            function addTerminalPrompt(promptText) {
-                const line = document.createElement('div');
-                const promptSpan = document.createElement('span');
-                promptSpan.textContent = promptText;
-                const echoSpan = document.createElement('span');
-                echoSpan.textContent = '';
-                line.appendChild(promptSpan);
-                line.appendChild(echoSpan);
-                terminal.appendChild(line);
-                terminal.scrollTop = terminal.scrollHeight;
-                _lastPromptEchoSpan = echoSpan;
-            }
-
-            // Robust CSV parser (handles CRLF and quoted fields)
-            // Returns array of objects keyed by header names
             function parseCSV(csvText) {
-                // Normalize line endings
                 const text = csvText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-
-                // Lightweight RFC4180 parser
                 const rows = [];
                 let cur = '';
                 let row = [];
                 let inQuotes = false;
+
                 for (let i = 0; i < text.length; i++) {
                     const ch = text[i];
                     if (ch === '"') {
                         if (inQuotes && text[i + 1] === '"') {
-                            // Escaped quote
                             cur += '"';
-                            i++; // skip next quote
+                            i++;
                         } else {
                             inQuotes = !inQuotes;
                         }
@@ -127,14 +88,13 @@
                         cur = '';
                     } else if (ch === '\n' && !inQuotes) {
                         row.push(cur);
-                        cur = '';
                         rows.push(row);
                         row = [];
+                        cur = '';
                     } else {
                         cur += ch;
                     }
                 }
-                // push last field/row if any
                 if (cur !== '' || row.length > 0) {
                     row.push(cur);
                     rows.push(row);
@@ -142,7 +102,6 @@
 
                 if (rows.length === 0) return [];
 
-                // Trim BOM from first header if present
                 if (rows[0].length > 0 && rows[0][0].charCodeAt(0) === 0xFEFF) {
                     rows[0][0] = rows[0][0].slice(1);
                 }
@@ -151,7 +110,6 @@
                 const data = [];
                 for (let r = 1; r < rows.length; r++) {
                     const values = rows[r];
-                    // skip empty rows
                     if (values.length === 1 && values[0].trim() === '') continue;
                     const obj = {};
                     for (let c = 0; c < headers.length; c++) {
@@ -162,23 +120,32 @@
                 return data;
             }
 
-            // Load stops CSV
+            function addTerminalLine(text, isError = false) {
+                const line = document.createElement('div');
+                line.textContent = text;
+                if (isError) line.style.color = '#ff6b6b';
+                terminal.appendChild(line);
+                terminal.scrollTop = terminal.scrollHeight;
+            }
+
+            function addTerminalPrompt(promptText) {
+                const line = document.createElement('div');
+                const promptSpan = document.createElement('span');
+                promptSpan.textContent = promptText;
+                const echoSpan = document.createElement('span');
+                echoSpan.textContent = '';
+                line.appendChild(promptSpan);
+                line.appendChild(echoSpan);
+                terminal.appendChild(line);
+                terminal.scrollTop = terminal.scrollHeight;
+                lastPromptEchoSpan = echoSpan;
+            }
+
             async function loadStopsData() {
                 try {
                     const response = await fetch('../csv_files/stops.csv');
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
                     const csvText = await response.text();
-
-                    // Diagnostics: show raw size and approximate line count
-                    const rawBytes = new Blob([csvText]).size;
-                    const newlineCount = (csvText.match(/\n/g) || []).length;
-                    addTerminalLine(`stops.csv: ${rawBytes} bytes, ~${newlineCount + 1} lines (including header)`);
-
-                    // Preview first/last 2 lines for verification
-                    const previewLines = csvText.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
-                    addTerminalLine(`Preview first line: ${previewLines[0] || ''}`);
-                    addTerminalLine(`Preview second line: ${previewLines[1] || ''}`);
-                    addTerminalLine(`Preview last line: ${previewLines[previewLines.length - 1] || ''}`);
-
                     stopsData = parseCSV(csvText);
                     return true;
                 } catch (err) {
@@ -187,32 +154,30 @@
                 }
             }
 
-            // Load stop_times and trips (used to build ordered stop sequences)
-            let stopTimes = []; // {trip_id, stop_id, stop_sequence}
-            let trips = []; // {trip_id, route_id}
-
             async function loadTripsAndStopTimes() {
                 try {
                     const [stResp, trResp] = await Promise.all([
                         fetch('../csv_files/stop_times.csv'),
                         fetch('../csv_files/trips.csv')
                     ]);
+                    if (!stResp.ok || !trResp.ok) throw new Error('HTTP error');
                     const stText = await stResp.text();
-                    const trText = await trResp.text();
-
                     const stRows = parseCSV(stText);
-                    const trRows = parseCSV(trText);
 
-                    // Map stop_times to simplified objects and sort by stop_sequence
-                    stopTimes = stRows.map(r => ({
-                        trip_id: r.trip_id || '',
-                        stop_id: r.stop_id || '',
-                        stop_sequence: parseInt(r.stop_sequence || '0', 10)
-                    }));
+                    const tripMap = new Map();
+                    for (const st of stRows) {
+                        const trip_id = st.trip_id || '';
+                        const stop_id = st.stop_id || '';
+                        const stop_sequence = parseInt(st.stop_sequence || '0', 10);
+                        if (!tripMap.has(trip_id)) tripMap.set(trip_id, []);
+                        tripMap.get(trip_id).push({ stop_id, stop_sequence });
+                    }
 
-                    trips = trRows.map(r => ({ trip_id: r.trip_id || '', route_id: r.route_id || '' }));
+                    for (const [trip_id, entries] of tripMap.entries()) {
+                        entries.sort((a, b) => a.stop_sequence - b.stop_sequence);
+                        tripStops.set(trip_id, entries.map(e => e.stop_id));
+                    }
 
-                    // Build an index: trip_id -> ordered list of stop_ids
                     return true;
                 } catch (err) {
                     addTerminalLine(`Error loading trips/stop_times: ${err.message}`, true);
@@ -220,150 +185,18 @@
                 }
             }
 
-            // Build trip -> ordered stop_id arrays
-            function buildTripIndex() {
-                const tripMap = new Map();
-                for (const st of stopTimes) {
-                    if (!tripMap.has(st.trip_id)) tripMap.set(st.trip_id, []);
-                    tripMap.get(st.trip_id).push(st);
-                }
-                // sort each trip by stop_sequence and replace with stop_id array
-                const tripStops = new Map();
-                for (const [trip_id, entries] of tripMap.entries()) {
-                    entries.sort((a, b) => a.stop_sequence - b.stop_sequence);
-                    tripStops.set(trip_id, entries.map(e => e.stop_id));
-                }
-                return tripStops;
-            }
-
-            // Find a trip that contains origin and final in order
-            function findTripContaining(originId, finalId, tripStopsIndex) {
-                for (const [trip_id, stopsArr] of tripStopsIndex.entries()) {
-                    const i1 = stopsArr.indexOf(originId);
-                    const i2 = stopsArr.indexOf(finalId);
-                    if (i1 !== -1 && i2 !== -1 && i1 < i2) {
-                        return { trip_id, stopsBetween: stopsArr.slice(i1, i2 + 1) };
-                    }
-                }
-                return null;
-            }
-
-            // Draw polyline through list of stop_ids and add markers
-            let currentPolyline = null;
-            let currentMarkersGroup = null; // LayerGroup for markers
-            function drawPathThroughStops(stopIds) {
-                const latlngs = [];
-                const markers = [];
-                for (let i = 0; i < stopIds.length; i++) {
-                    const sid = stopIds[i];
-                    const s = stopsData.find(x => x.stop_id === sid);
-                    if (s && s.stop_lat && s.stop_lon) {
-                        const lat = parseFloat(s.stop_lat);
-                        const lon = parseFloat(s.stop_lon);
-                        latlngs.push([lat, lon]);
-
-                        // create a marker or circleMarker for this stop
-                        let markerOptions = { radius: 6, color: '#3388ff', fillColor: '#3388ff', fillOpacity: 1 };
-                        let marker;
-                        // Start stop -> green, end stop -> red, intermediates -> small blue circle
-                        if (i === 0) {
-                            markerOptions.color = 'green';
-                            markerOptions.fillColor = 'green';
-                            markerOptions.radius = 8;
-                            marker = L.circleMarker([lat, lon], markerOptions);
-                        } else if (i === stopIds.length - 1) {
-                            markerOptions.color = 'red';
-                            markerOptions.fillColor = 'red';
-                            markerOptions.radius = 8;
-                            marker = L.circleMarker([lat, lon], markerOptions);
-                        } else {
-                            marker = L.circleMarker([lat, lon], markerOptions);
-                        }
-
-                        // Add a popup showing stop id and name
-                        const name = s.stop_name || '';
-                        marker.bindPopup(`<strong>${sid}</strong><br/>${name}`);
-
-                        // Add a permanent centered tooltip showing the sequential index (1..N)
-                        // This ensures that even if stop IDs are non-consecutive, markers display a simple step number.
-                        try {
-                            marker.bindTooltip(String(i + 1), { permanent: true, direction: 'center', className: 'stop-label' });
-                        } catch (e) {
-                            // ignore if binding tooltip fails for any reason
-                        }
-
-                        markers.push(marker);
-                    }
-                }
-
-                if (latlngs.length < 2) return false;
-
-                // Remove previous polyline and markers
-                if (currentPolyline) map.removeLayer(currentPolyline);
-                if (currentMarkersGroup) map.removeLayer(currentMarkersGroup);
-
-                // Add polyline
-                currentPolyline = L.polyline(latlngs, { color: 'blue', weight: 4 }).addTo(map);
-
-                // Create a LayerGroup for markers so they can be removed together
-                currentMarkersGroup = L.layerGroup(markers).addTo(map);
-
-                // Optionally open start and end popups for clarity
-                if (markers.length > 0) {
-                    try { markers[0].openPopup(); } catch (e) { }
-                    if (markers.length > 1) try { markers[markers.length - 1].openPopup(); } catch (e) { }
-                }
-
-                map.fitBounds(currentPolyline.getBounds(), { padding: [20, 20] });
-                return true;
-            }
-
-            // Load routes CSV (diagnostics similar to stops)
-            async function loadRoutesData() {
-                try {
-                    const response = await fetch('../csv_files/routes.csv');
-                    const csvText = await response.text();
-
-                    const rawBytes = new Blob([csvText]).size;
-                    const newlineCount = (csvText.match(/\n/g) || []).length;
-                    addTerminalLine(`routes.csv: ${rawBytes} bytes, ~${newlineCount + 1} lines (including header)`);
-
-                    const previewLines = csvText.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
-                    addTerminalLine(`routes preview first: ${previewLines[0] || ''}`);
-                    addTerminalLine(`routes preview second: ${previewLines[1] || ''}`);
-                    addTerminalLine(`routes preview last: ${previewLines[previewLines.length - 1] || ''}`);
-
-                    const routesData = parseCSV(csvText);
-                    addTerminalLine(`Parsed ${routesData.length} routes`);
-                    return routesData;
-                } catch (err) {
-                    addTerminalLine(`Error loading routes.csv: ${err.message}`, true);
-                    return null;
-                }
-            }
-
-            // Find stop by name or ID
             function findStop(query) {
-
                 if (!query) return null;
+                const q = query.trim();
 
-                const queryLower = query.toLowerCase();
-
-                // Exact match on stop_id
-                let found = stopsData.find(stop => stop.stop_id === query);
+                let found = stopsData.find(stop => stop.stop_id === q);
                 if (found) return found;
 
-                // Substring match on stop_name (case-insensitive)
-                found = stopsData.find(stop =>
-                    stop.stop_name && stop.stop_name.toLowerCase().includes(queryLower)
-                );
-                return found;
+                found = stopsData.find(stop => stop.stop_name && stop.stop_name.trim().toLowerCase() === q.toLowerCase());
+                return found || null;
             }
 
-            // Display stop details
-            function displayStopInfo(label, stop, query) {
-                addTerminalLine('');
-                addTerminalLine(`${label}:`);
+            function displayStopInfo(stop, query) {
                 if (stop) {
                     addTerminalLine(`Found stop: id=${stop.stop_id} name=${stop.stop_name}`);
                 } else {
@@ -371,12 +204,156 @@
                 }
             }
 
-            // Start the program
-            async function startProgram() {
+            function findTripWithStops(originId, finalId) {
+                for (const [trip_id, stopIds] of tripStops.entries()) {
+                    const idx1 = stopIds.indexOf(originId);
+                    const idx2 = stopIds.indexOf(finalId);
+                    if (idx1 !== -1 && idx2 !== -1 && idx1 < idx2) {
+                        return { trip_id, stopsBetween: stopIds.slice(idx1, idx2 + 1) };
+                    }
+                }
+                return null;
+            }
+
+            // Haversine formula to calculate distance in km between two lat/lon points
+            function calculateDistance(lat1, lon1, lat2, lon2) {
+                const R = 6371; // Earth's radius in km
+                const dLat = (lat2 - lat1) * Math.PI / 180;
+                const dLon = (lon2 - lon1) * Math.PI / 180;
+                const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                return R * c;
+            }
+
+            // Calculate total distance for a set of coordinates
+            function calculateTotalDistance(coords) {
+                if (coords.length < 2) return 0;
+                let totalDist = 0;
+                for (let i = 0; i < coords.length - 1; i++) {
+                    const [lat1, lon1] = coords[i];
+                    const [lat2, lon2] = coords[i + 1];
+                    totalDist += calculateDistance(lat1, lon1, lat2, lon2);
+                }
+                return totalDist;
+            }
+
+            // Estimate travel time (assuming average speed of 20 km/h for transit)
+            function estimateTime(distanceKm) {
+                const averageSpeedKmh = 20;
+                const timeMinutes = (distanceKm / averageSpeedKmh) * 60;
+                return timeMinutes;
+            }
+
+            function drawPath(stopIds) {
+                if (currentPolyline) map.removeLayer(currentPolyline);
+                if (currentMarkersGroup) map.removeLayer(currentMarkersGroup);
+                currentConnectorLines.forEach(line => map.removeLayer(line));
+                currentConnectorLines = [];
+
+                const latlngs = [];
+                const markers = [];
+                const markerCoords = [];
+
+                for (let i = 0; i < stopIds.length; i++) {
+                    const stopId = stopIds[i];
+                    const stop = stopsData.find(s => s.stop_id === stopId);
+
+                    if (stop && stop.stop_lat && stop.stop_lon) {
+                        const lat = parseFloat(stop.stop_lat);
+                        const lon = parseFloat(stop.stop_lon);
+                        const coord = [lat, lon];
+
+                        latlngs.push(coord);
+                        markerCoords.push(coord);
+
+                        let color = '#3388ff';
+                        let radius = 7;
+                        if (i === 0) {
+                            color = 'green';
+                            radius = 8;
+                        } else if (i === stopIds.length - 1) {
+                            color = 'red';
+                            radius = 8;
+                        }
+
+                        const marker = L.circleMarker(coord, {
+                            radius: radius,
+                            color: color,
+                            fillColor: color,
+                            fillOpacity: 1,
+                            weight: 2
+                        });
+
+                        const name = stop.stop_name || 'Unknown';
+                        marker.bindPopup(`<strong>${stopId}</strong><br/>${name}`);
+
+                        try {
+                            marker.bindTooltip(String(i + 1), {
+                                permanent: true,
+                                direction: 'center',
+                                className: 'stop-label'
+                            });
+                        } catch (e) {
+                            // ignore
+                        }
+
+                        markers.push(marker);
+                    }
+                }
+
+                if (latlngs.length < 2) {
+                    addTerminalLine('Not enough coordinates to draw path', true);
+                    return false;
+                }
+
+                currentPolyline = L.polyline(latlngs, {
+                    color: 'blue',
+                    weight: 4,
+                    opacity: 0.7
+                }).addTo(map);
+
+                for (let i = 0; i < markerCoords.length - 1; i++) {
+                    const line = L.polyline([markerCoords[i], markerCoords[i + 1]], {
+                        color: '#999',
+                        weight: 2,
+                        opacity: 0.5,
+                        dashArray: '5, 5'
+                    }).addTo(map);
+                    currentConnectorLines.push(line);
+                }
+
+                currentMarkersGroup = L.layerGroup(markers).addTo(map);
+
+                if (markers.length > 0) {
+                    try { markers[0].openPopup(); } catch (e) { }
+                    if (markers.length > 1) {
+                        try { markers[markers.length - 1].openPopup(); } catch (e) { }
+                    }
+                }
+
+                try {
+                    map.fitBounds(currentPolyline.getBounds(), { padding: [20, 20] });
+                } catch (e) { }
+
+                // Calculate and display distance and time
+                const totalDistanceKm = calculateTotalDistance(markerCoords);
+                const totalTimeMinutes = estimateTime(totalDistanceKm);
+                const hours = Math.floor(totalTimeMinutes / 60);
+                const minutes = Math.round(totalTimeMinutes % 60);
+                const timeStr = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+
+                addTerminalLine(`Distance: ${totalDistanceKm.toFixed(2)} km`);
+                addTerminalLine(`Estimated time: ${timeStr}`);
+
+                return true;
+            } async function startProgram() {
                 if (isRunning) return;
 
                 terminal.innerHTML = '';
                 addTerminalLine('$ gec2025 - GTFS Stop Lookup Program\n');
+
                 startBtn.disabled = true;
                 restartBtn.disabled = true;
                 terminalInput.disabled = false;
@@ -386,153 +363,99 @@
                 originStop = null;
                 finalStop = null;
 
-                try {
-                    // Load the stops data
-                    addTerminalLine('Loading stops.csv...');
-                    const loaded = await loadStopsData();
-
-                    if (!loaded || stopsData.length === 0) {
-                        addTerminalLine('Error: Could not load stops data', true);
-                        startBtn.disabled = false;
-                        restartBtn.disabled = false;
-                        terminalInput.disabled = true;
-                        submitBtn.disabled = true;
-                        isRunning = false;
-                        inputState = null;
-                        return;
-                    }
-
-                    addTerminalLine(`Loaded ${stopsData.length} stops\n`);
-                    // Also load and report routes.csv diagnostics
-                    const routes = await loadRoutesData();
-                    if (routes) addTerminalLine(`Loaded ${routes.length} routes\n`);
-                    // Match C program prompt
-                    addTerminalPrompt('Enter origin stop name or stop_id: ');
-                    terminalInput.focus();
-                } catch (err) {
-                    addTerminalLine(`Error: ${err.message}`, true);
-                    startBtn.disabled = false;
-                    restartBtn.disabled = false;
-                    terminalInput.disabled = true;
-                    submitBtn.disabled = true;
-                    isRunning = false;
-                    inputState = null;
+                const stopsLoaded = await loadStopsData();
+                if (!stopsLoaded || stopsData.length === 0) {
+                    addTerminalLine('Error: Could not load stops data', true);
+                    endProgram();
+                    return;
                 }
+
+                const tripsLoaded = await loadTripsAndStopTimes();
+                if (!tripsLoaded) {
+                    addTerminalLine('Error: Could not load trips data', true);
+                    endProgram();
+                    return;
+                }
+
+                addTerminalPrompt('Enter origin stop name or stop_id: ');
+                terminalInput.focus();
             }
 
-            // Handle user input submission
+            function endProgram() {
+                startBtn.disabled = false;
+                restartBtn.disabled = false;
+                terminalInput.disabled = true;
+                submitBtn.disabled = true;
+                isRunning = false;
+                inputState = null;
+            }
+
             function handleUserInput() {
                 const input = terminalInput.value.trim();
                 if (!input) return;
 
-                // Echo input on the same prompt line (like a terminal)
-                if (_lastPromptEchoSpan) {
-                    _lastPromptEchoSpan.textContent = input;
-                    _lastPromptEchoSpan = null;
-                } else {
-                    addTerminalLine(input);
+                if (lastPromptEchoSpan) {
+                    lastPromptEchoSpan.textContent = input;
+                    lastPromptEchoSpan = null;
                 }
                 terminalInput.value = '';
 
                 if (inputState === 'waiting_origin') {
                     originStop = findStop(input);
-                    displayStopInfo('Origin Stop', originStop, input);
-                    addTerminalPrompt('Enter final stop name or stop_id: ');
-                    inputState = 'waiting_final';
-                    terminalInput.focus();
+                    displayStopInfo(originStop, input);
+
+                    if (originStop) {
+                        addTerminalPrompt('Enter final stop name or stop_id: ');
+                        inputState = 'waiting_final';
+                        terminalInput.focus();
+                    } else {
+                        addTerminalLine('Please try again.', true);
+                        addTerminalPrompt('Enter origin stop name or stop_id: ');
+                    }
                 } else if (inputState === 'waiting_final') {
                     finalStop = findStop(input);
-                    displayStopInfo('Final Stop', finalStop, input);
+                    displayStopInfo(finalStop, input);
 
-                    // Program complete
-                    addTerminalLine('');
-                    addTerminalLine('$ Program completed successfully');
+                    if (finalStop) {
+                        
+                        const oid = originStop.stop_id;
+                        const fid = finalStop.stop_id;
+                        const tripResult = findTripWithStops(oid, fid);
 
-                    // Try to load stop_times/trips and draw path
-                    (async () => {
-                        const loaded = await loadTripsAndStopTimes();
-                        if (loaded) {
-                            const tripIndex = buildTripIndex();
-                            const oid = originStop ? originStop.stop_id : null;
-                            const fid = finalStop ? finalStop.stop_id : null;
-                            if (oid && fid) {
-                                const found = findTripContaining(oid, fid, tripIndex);
-                                if (found) {
-                                    addTerminalLine(`Drawing path for trip ${found.trip_id} through ${found.stopsBetween.length} stops`);
-                                    const ok = drawPathThroughStops(found.stopsBetween);
-                                    if (!ok) addTerminalLine('Not enough coordinates to draw path', true);
-                                } else {
-                                    addTerminalLine('No trip found that contains both stops in order', true);
-                                }
+                        if (tripResult) {
+                            addTerminalLine(`Found trip with ${tripResult.stopsBetween.length} stops`);
+                            const ok = drawPath(tripResult.stopsBetween);
+                            if (!ok) {
+                                addTerminalLine('Failed to draw path', true);
                             }
+                        } else {
+                            addTerminalLine('No trip found that contains both stops in order', true);
                         }
-                    })();
 
-                    // Disable input
-                    terminalInput.disabled = true;
-                    submitBtn.disabled = true;
-                    startBtn.disabled = false;
-                    restartBtn.disabled = false;
-                    isRunning = false;
-                    inputState = null;
+                        endProgram();
+                    } else {
+                        addTerminalLine('Please try again.', true);
+                        addTerminalPrompt('Enter final stop name or stop_id: ');
+                    }
                 }
             }
 
-            // Restart the program
             function restartProgram() {
                 startProgram();
             }
 
-            // (Native runner removed from UI)
-
-            // Run the native compiled program via local server
-            async function runNativeProgram(inputLines) {
-                // inputLines should be an array of lines to send as stdin
-                try {
-                    addTerminalLine('\nStarting native execution (server) ...');
-                    const body = { input: inputLines.join('\n') + '\n' };
-                    const resp = await fetch('http://localhost:3000/run', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(body)
-                    });
-
-                    if (!resp.ok && resp.status !== 200) {
-                        addTerminalLine(`Server returned ${resp.status} ${resp.statusText}`, true);
-                        return false;
-                    }
-
-                    // Stream response body
-                    const reader = resp.body.getReader();
-                    const decoder = new TextDecoder();
-                    while (true) {
-                        const { done, value } = await reader.read();
-                        if (done) break;
-                        const chunk = decoder.decode(value);
-                        addTerminalLine(chunk);
-                    }
-                    addTerminalLine('\nNative run complete');
-                    return true;
-                } catch (err) {
-                    addTerminalLine(`Error running native program: ${err.message}`, true);
-                    return false;
-                }
-            }
-
-            // Event listeners
             startBtn.addEventListener('click', startProgram);
-            // Native run removed from UI (no native button)
             restartBtn.addEventListener('click', restartProgram);
             submitBtn.addEventListener('click', handleUserInput);
             terminalInput.addEventListener('keypress', function (e) {
-                if (e.key === 'Enter') handleUserInput();
+                if (e.key === 'Enter') {
+                    handleUserInput();
+                }
             });
 
-            // Initial state
             terminalInput.disabled = true;
             submitBtn.disabled = true;
             addTerminalLine('Ready. Click "Start" to run the GEC2025 C program.');
-            addTerminalLine('This simulates the C program in the browser.');
         });
     </script>
 </body>
